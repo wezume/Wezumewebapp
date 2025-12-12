@@ -1,26 +1,86 @@
+/* eslint-disable no-unused-vars */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Grid,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Paper,
   Typography,
   Collapse,
   Snackbar,
   Alert,
-  CircularProgress
 } from '@mui/material';
-import { FilterList, ExpandMore, ExpandLess, Refresh } from '@mui/icons-material';
+import { FilterList, ExpandMore, ExpandLess, Refresh, UploadFile, Mic } from '@mui/icons-material';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/appStore';
 import VideoCard from '../components/videos/VideoCard';
 import VideoSkeleton from '../components/videos/VideoSkeleton';
+import apiClient from '../axios/axios';
 
+// --- WAV ENCODER (improved) ---
+const encodeWAV = (audioBlob) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return reject(new Error('AudioContext not supported'));
+      const audioContext = new AudioCtx();
+      const fileReader = new FileReader();
+
+      fileReader.onload = function () {
+        audioContext.decodeAudioData(this.result)
+          .then(buffer => {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const totalLength = buffer.length * numChannels * 2 + 44;
+            const view = new DataView(new ArrayBuffer(totalLength));
+            let offset = 0;
+            const writeString = (str) => {
+              for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+              }
+              offset += str.length;
+            };
+
+            writeString('RIFF');
+            view.setUint32(offset, totalLength - 8, true); offset += 4;
+            writeString('WAVE');
+
+            writeString('fmt ');
+            view.setUint32(offset, 16, true); offset += 4;
+            view.setUint16(offset, 1, true); offset += 2;
+            view.setUint16(offset, numChannels, true); offset += 2;
+            view.setUint32(offset, sampleRate, true); offset += 4;
+            view.setUint32(offset, sampleRate * numChannels * 2, true); offset += 4;
+            view.setUint16(offset, numChannels * 2, true); offset += 2;
+            view.setUint16(offset, 16, true); offset += 2;
+
+            writeString('data');
+            view.setUint32(offset, buffer.length * numChannels * 2, true); offset += 4;
+
+            for (let i = 0; i < buffer.length; i++) {
+              for (let channel = 0; channel < numChannels; channel++) {
+                const s = buffer.getChannelData(channel)[i];
+                const val = s < 0 ? s * 0x8000 : s * 0x7fff;
+                view.setInt16(offset, val, true);
+                offset += 2;
+              }
+            }
+
+            resolve(new Blob([view.buffer], { type: 'audio/wav' }));
+          })
+          .catch(err => reject(new Error('Audio decode failed: ' + err)));
+      };
+
+      fileReader.onerror = () => reject(new Error('FileReader failed'));
+      fileReader.readAsArrayBuffer(audioBlob);
+    } catch (e) {
+      reject(new Error('WAV encoding failed: ' + e.message));
+    }
+  });
+};
+
+// --- Filters persistence helpers ---
 const getPersistedFilters = () => {
   try {
     const stored = sessionStorage.getItem('videoFilters');
@@ -33,24 +93,21 @@ const getPersistedFilters = () => {
 const persistFilters = (filters) => {
   try {
     sessionStorage.setItem('videoFilters', JSON.stringify(filters));
-  } catch (error) {
-    console.error('Failed to persist filters:', error);
-  }
+  } catch { }
 };
 
 const storeFilteredVideosForNavigation = (videos) => {
   try {
     sessionStorage.setItem('currentVideosList', JSON.stringify(videos));
     sessionStorage.setItem('videoListType', 'job');
-  } catch (error) {
-    console.error('Failed to store filtered videos for navigation:', error);
-  }
+  } catch { }
 };
 
+// --- Component ---
 export default function Videos() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const jobid = searchParams.get('jobid');
+  const jobid = searchParams.get('jobid') || '';
   const scrollContainerRef = useRef(null);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -58,370 +115,487 @@ export default function Videos() {
   const [isFilteredResults, setIsFilteredResults] = useState(false);
 
   const getInitialFilters = () => {
-    const persistedFilters = getPersistedFilters();
-    if (persistedFilters) {
+    const persisted = getPersistedFilters();
+    if (persisted) {
       return {
-        ...persistedFilters,
-        jobid: jobid || persistedFilters.jobid || ''
+        transcriptionKeywords: persisted.transcriptionKeywords || '',
+        jobid: jobid || persisted.jobid || '',
       };
     }
     return {
       transcriptionKeywords: '',
-      keyskills: '',
-      experience: '',
-      industry: '',
-      city: '',
-      college: '',
-      jobid: jobid || ''
+      jobid: jobid || '',
     };
   };
 
   const [filters, setFilters] = useState(getInitialFilters);
 
   const {
-    userDetails,
     videos,
-    isLoadingVideos,
-    isLoadingMoreVideos,
-    hasMoreVideos,
-    videoError,
-    getVideos,
-    loadMoreVideos,
-    refreshVideos,
     filteredVideos,
+    userDetails,
+    isLoadingVideos,
     isLoadingFilteredVideos,
+    isLoadingMoreVideos,
     isLoadingMoreFilteredVideos,
+    hasMoreVideos,
     hasMoreFilteredVideos,
+    videoError,
     filteredVideoError,
+    getVideos,
     getFilteredVideos,
-    loadMoreFilteredVideos,
+    refreshVideos,
     refreshFilteredVideos,
+    loadMoreVideos,
+    loadMoreFilteredVideos,
   } = useAppStore();
 
-  const cityOptions = [
-    'New Delhi', 'Mumbai', 'Bengaluru', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'
-  ];
+  // local manual results when /voice is called
+  const [manualFilteredVideos, setManualFilteredVideos] = useState([]);
 
-  const industryOptions = [
-    'Banking & Finance', 'Biotechnology', 'Construction', 'Consumer Goods', 'Education', 'Energy',
-    'Healthcare', 'Media & Entertainment', 'Hospitality', 'Information Technology (IT)', 'Insurance',
-    'Manufacturing', 'Non-Profit', 'Real Estate', 'Retail', 'Transportation', 'Travel & Tourism',
-    'Textiles', 'Logistics & Supply Chain', 'Sports', 'E-commerce', 'Consulting', 'Advertising & Marketing',
-    'Architecture', 'Arts & Design', 'Environmental Services', 'Human Resources', 'Legal', 'Management',
-    'Telecommunications'
-  ];
+  const displayVideos = isFilteredResults
+    ? (manualFilteredVideos && manualFilteredVideos.length ? manualFilteredVideos : filteredVideos)
+    : videos;
 
-  const displayVideos = isFilteredResults ? filteredVideos : videos;
   const isLoading = isFilteredResults ? isLoadingFilteredVideos : isLoadingVideos;
   const isLoadingMore = isFilteredResults ? isLoadingMoreFilteredVideos : isLoadingMoreVideos;
   const hasMore = isFilteredResults ? hasMoreFilteredVideos : hasMoreVideos;
   const error = isFilteredResults ? filteredVideoError : videoError;
 
+  // --- Navigation helper ---
   const handleVideoClick = (video, index) => {
-    const videoList = displayVideos;
-    const videoSource = 'videos';
-    
-    try {
-      sessionStorage.setItem('videoSource', videoSource);
-      sessionStorage.setItem('currentVideosList', JSON.stringify(videoList));
-      sessionStorage.setItem('videoListType', videoSource);
-    } catch (error) {
-      console.error('Failed to store video navigation info:', error);
-    }
+    sessionStorage.setItem('videoSource', 'videos');
+    sessionStorage.setItem('currentVideosList', JSON.stringify(displayVideos));
+    sessionStorage.setItem('videoListType', 'videos');
 
-    const hashedId = btoa(video.id.toString());
+    const hashedId = btoa(String(video.id));
     navigate(`/app/video/${hashedId}`, {
-      state: { 
+      state: {
         from: '/app/videos',
-        source: videoSource,
-        videoList: videoList,
-        index: index,
+        source: 'videos',
+        videoList: displayVideos,
+        index,
         isFiltered: isFilteredResults,
-        filters: isFilteredResults ? filters : null
-      }
+        filters: isFilteredResults ? filters : null,
+      },
     });
   };
 
+  // --- scroll/infinite ---
   const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
-
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
 
-    if (scrollPercentage > 0.8) {
+    if ((scrollTop + clientHeight) / scrollHeight > 0.8) {
       if (isFilteredResults && hasMore && !isLoadingMore) {
         loadMoreFilteredVideos(filters);
       } else if (!isFilteredResults && hasMore && !isLoadingMore) {
         loadMoreVideos();
       }
     }
-  }, [hasMore, isLoadingMore, filters, loadMoreVideos, isFilteredResults, loadMoreFilteredVideos]);
+  }, [hasMore, isLoadingMore, filters, isFilteredResults]);
 
   useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
     }
   }, [handleScroll]);
 
   useEffect(() => {
-    if (jobid) {
-      setFilters(prev => {
-        const updated = { ...prev, jobid };
-        persistFilters(updated);
-        return updated;
-      });
-    }
-  }, [jobid]);
-
-  useEffect(() => {
-    if (userDetails) {
-      const persistedFilters = getPersistedFilters();
-      if (persistedFilters && Object.values(persistedFilters).some(val => val && val.toString().trim() !== '')) {
-        applyPersistedFilters();
-      } else {
-        fetchVideos();
-      }
-    }
+    if (userDetails) fetchVideos();
   }, [userDetails, jobid]);
 
   useEffect(() => {
-    if (displayVideos.length > 0) {
+    if (displayVideos?.length > 0) {
       storeFilteredVideosForNavigation(displayVideos);
     }
   }, [displayVideos]);
 
-  const applyPersistedFilters = async () => {
-    const persistedFilters = getPersistedFilters();
-    if (!persistedFilters) {
-      fetchVideos();
-      return;
-    }
-
-    const hasFilters = Object.values(persistedFilters).some(val => val && val.toString().trim() !== '');
-    if (!hasFilters) {
-      fetchVideos();
-      return;
-    }
-
-    try {
-      setIsFilteredResults(true);
-      await getFilteredVideos(persistedFilters);
-    } catch (error) {
-      console.error('Error applying persisted filters:', error);
-      fetchVideos();
-    }
-  };
-
   const fetchVideos = async () => {
-    try {
-      setIsFilteredResults(false);
-      await getVideos();
-    } catch (error) {
-      console.error('Error fetching videos:', error);
-      showSnackbar('Failed to fetch videos', 'error');
-    }
+    setIsFilteredResults(false);
+    await getVideos();
   };
 
   const handleRefresh = async () => {
-    try {
-      if (isFilteredResults) {
-        await refreshFilteredVideos(filters);
-        showSnackbar('Filtered videos refreshed successfully', 'success');
-      } else {
-        await refreshVideos();
-        showSnackbar('Videos refreshed successfully', 'success');
-      }
-    } catch (error) {
-      console.error('Error refreshing videos:', error);
-      showSnackbar('Failed to refresh videos', 'error');
+    if (isFilteredResults) {
+      await refreshFilteredVideos(filters);
+    } else {
+      await refreshVideos();
     }
   };
 
   const handleFilterChange = (field, value) => {
-    const updatedFilters = { ...filters, [field]: value };
-    setFilters(updatedFilters);
-    persistFilters(updatedFilters);
+    const updated = { ...filters, [field]: value };
+    setFilters(updated);
+    persistFilters(updated);
   };
 
+  // ---------------- VOICE RECORDING ----------------
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const audioStreamRef = useRef(null);
+
+  const getSupportedMimeType = () => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+    ];
+    for (const t of types) {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return '';
+  };
+
+  const startRecording = async () => {
+    if (isRecording) return;
+
+    try {
+      console.log('🎤 Starting microphone…');
+      const mimeType = getSupportedMimeType();
+      console.log('Using MIME type:', mimeType || '(default)');
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          noiseSuppression: true,
+          echoCancellation: true,
+        },
+      });
+
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.onstart = () => {
+        console.log('🎙 Recorder started');
+      };
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+          console.log('📥 Chunk received:', event.data.size, 'bytes');
+        } else {
+          console.log('⚠ Empty chunk received');
+        }
+      };
+
+      recorder.onerror = (e) => {
+        console.error('Recorder Error:', e);
+        showSnackbar('Recording error: ' + (e?.message || 'unknown'), 'error');
+        try { stopRecording(); } catch { }
+      };
+
+      recorder.onstop = async () => {
+        console.log('🛑 Recorder stopped');
+        try { audioStreamRef.current.getTracks().forEach((t) => t.stop()); } catch { }
+
+        if (!audioChunksRef.current.length) {
+          console.log('❌ No audio chunks captured');
+          showSnackbar('No voice captured. Try speaking louder or check microphone permissions.', 'error');
+          setIsRecording(false);
+          return;
+        }
+
+        console.log('🎉 Total Chunks Captured:', audioChunksRef.current.length);
+
+        let blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
+
+        // Convert to WAV for better compatibility if needed
+        try {
+          // Only attempt conversion if supported (encodeWAV may fail on some browsers for certain blob types)
+          blob = await encodeWAV(blob);
+        } catch (err) {
+          console.warn('WAV conversion skipped/fails, proceeding with original blob:', err);
+        }
+
+        await sendAudioForTranscription(blob);
+        setIsRecording(false);
+      };
+
+      // collect chunks every 500ms so ondataavailable fires frequently
+      recorder.start(500);
+      setIsRecording(true);
+      showSnackbar('Recording started...', 'info');
+    } catch (err) {
+      console.error('Microphone access failed:', err);
+      let message = 'Microphone access failed. Ensure site is served over HTTPS and permissions are allowed.';
+      if (err && err.name === 'NotAllowedError') message = 'Microphone permission denied by the user.';
+      showSnackbar(message, 'error');
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state === 'recording') {
+      rec.stop();
+      setIsRecording(false);
+    } else {
+      if (audioStreamRef.current) {
+        try { audioStreamRef.current.getTracks().forEach((t) => t.stop()); } catch { }
+      }
+      setIsRecording(false);
+      showSnackbar('Recording stopped.', 'info');
+    }
+  };
+
+  // Upload recorded audio to your transcription endpoint (/search/upload-voice-search)
+  const sendAudioForTranscription = async (blob) => {
+    setIsUploadingVoice(true);
+    try {
+      const formData = new FormData();
+      // backend expects file + userId
+      const filename = `voice_${Date.now()}.wav`;
+      formData.append('file', new File([blob], filename, { type: 'audio/wav' }));
+      if (userDetails?.userId) {
+        formData.append('userId', userDetails.userId);
+      } else {
+        console.warn('userId not available in userDetails. Backend may reject transcription.');
+      }
+
+      showSnackbar('Uploading audio for transcription...', 'info');
+
+      const res = await apiClient.post('/search/upload-voice-search', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      // Expect the backend to return transcription text
+      const transcription =
+        (res.data && (res.data.transcription || res.data.text || res.data)) || '';
+
+      const transcriptionText = typeof transcription === 'string' ? transcription : JSON.stringify(transcription);
+
+      if (!transcriptionText || !String(transcriptionText).trim()) {
+        showSnackbar('Transcription returned empty. Try again.', 'warning');
+        setIsUploadingVoice(false);
+        return;
+      }
+
+      // Put transcription into input but do NOT auto-apply search
+      const updated = { ...filters, transcriptionKeywords: transcriptionText };
+      setFilters(updated);
+      persistFilters(updated);
+
+      showSnackbar('Transcription ready. Click "Apply Filters" to search.', 'success');
+      setIsFilteredResults(false); // do not automatically switch to filtered results
+    } catch (e) {
+      console.error('Transcription upload failed:', e);
+      showSnackbar('Transcription failed: ' + (e?.message || 'Server error'), 'error');
+    }
+    setIsUploadingVoice(false);
+  };
+
+  // ---------------- JD UPLOAD ----------------
+  const jdInputRef = useRef(null);
+  const [isUploadingJD, setIsUploadingJD] = useState(false);
+
+  const handleJdFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingJD(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (userDetails?.userId) {
+        formData.append('userId', userDetails.userId);
+      }
+
+      const res = await apiClient.post('/search/jd', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      // backend might return transcription or title/skills/description
+      let transcription = '';
+      if (res.data) {
+        if (res.data.transcription) transcription = res.data.transcription;
+        else {
+          const { title, skills, description } = res.data || {};
+          transcription =
+            (title || '') +
+            (Array.isArray(skills) ? '\n' + skills.join(', ') : skills ? '\n' + skills : '') +
+            (description ? '\n' + description : '');
+        }
+      }
+
+      if (!transcription || !String(transcription).trim()) {
+        showSnackbar('No readable content extracted from JD.', 'warning');
+        setIsUploadingJD(false);
+        if (jdInputRef.current) jdInputRef.current.value = '';
+        return;
+      }
+
+      const updated = { ...filters, transcriptionKeywords: transcription };
+      setFilters(updated);
+      persistFilters(updated);
+
+      showSnackbar('JD extracted. Click "Apply Filters" to search.', 'success');
+      setIsFilteredResults(false); // do not automatically apply
+    } catch (e) {
+      console.error('JD Upload Failed:', e);
+      showSnackbar('JD extraction failed: ' + (e?.message || 'Server error'), 'error');
+    }
+
+    setIsUploadingJD(false);
+    if (jdInputRef.current) jdInputRef.current.value = '';
+  };
+
+  // ---------------- APPLY FILTERS: call your /voice endpoint manually ----------------
   const applyFilters = async () => {
-    const hasFilters = Object.values(filters).some(val => val && val.toString().trim() !== '');
-    
-    if (!hasFilters) {
-      setIsFilteredResults(false);
-      await getVideos();
-      persistFilters(filters);
+    const transcriptionText = filters.transcriptionKeywords || '';
+    if (!transcriptionText.trim()) {
+      showSnackbar('Search field is empty. Showing all videos.', 'info');
+      fetchVideos();
       return;
     }
 
+    // Call your /voice endpoint which expects userId and transcription (as @RequestParam)
     try {
       setIsFilteredResults(true);
-      await getFilteredVideos(filters);
-      showSnackbar('Fetched videos matching the filters', 'success');
-    } catch (error) {
-      showSnackbar(`Filter error: ${error.response?.data?.message || error.message}`, 'error');
-      setIsFilteredResults(false);
-      await getVideos();
+      showSnackbar('Searching...', 'info');
+
+      const params = new URLSearchParams();
+      params.append('userId', userDetails?.userId ?? '');
+      params.append('transcription', transcriptionText);
+
+      const res = await apiClient.post('/search/voice', params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      // Expect array of video objects from backend
+      if (Array.isArray(res.data)) {
+        setManualFilteredVideos(res.data);
+        showSnackbar(`Found ${res.data.length} videos`, 'success');
+      } else {
+        // fallback: if backend returned an object with list
+        const list = res.data?.results || res.data?.videos || [];
+        setManualFilteredVideos(Array.isArray(list) ? list : []);
+        showSnackbar(`Search completed`, 'success');
+      }
+    } catch (e) {
+      console.error('Voice search (/voice) failed:', e);
+      showSnackbar('Search failed: ' + (e?.message || 'Server error'), 'error');
+      // keep previous filteredVideos if any
+      setManualFilteredVideos([]);
+      setIsFilteredResults(true); // still show filtered state
     }
   };
 
   const clearFilters = () => {
-    const clearedFilters = {
+    const cleared = {
       transcriptionKeywords: '',
-      keyskills: '',
-      experience: '',
-      industry: '',
-      city: '',
-      college: '',
-      jobid: jobid || ''
+      jobid: jobid || '',
     };
-    setFilters(clearedFilters);
-    persistFilters(clearedFilters);
+    setFilters(cleared);
+    persistFilters(cleared);
     setIsFilteredResults(false);
+    setManualFilteredVideos([]);
     getVideos();
   };
 
-  const showSnackbar = (message, severity) => {
+  const showSnackbar = (message, severity = 'info') => {
     setSnackbar({ open: true, message, severity });
-  };
-
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') return;
-    setSnackbar(prev => ({ ...prev, open: false }));
   };
 
   return (
     <Box ref={scrollContainerRef} sx={{ p: 3, height: '100vh', overflow: 'auto' }}>
+      {/* JOB INFO */}
       {jobid && (
-        <Paper sx={{ p: 2, mb: 3, bgcolor: 'info.light', color: 'info.contrastText' }}>
-          <Typography variant="h6" gutterBottom>
-            Job-Specific Videos (Job ID: {jobid})
-          </Typography>
-          <Typography variant="body2">
-            Showing videos related to your assigned job
-          </Typography>
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6">Job-Specific Videos (Job ID: {jobid})</Typography>
+          <Typography variant="body2">Showing videos related to this job</Typography>
         </Paper>
       )}
 
+      {/* HEADER */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Videos</Typography>
-        <Box sx={{ display: 'flex', gap: { xs: 0.5, lg: 2 } }}>
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             startIcon={<FilterList />}
             endIcon={filtersOpen ? <ExpandLess /> : <ExpandMore />}
-            onClick={() => setFiltersOpen(!filtersOpen)}
             variant="outlined"
             size="small"
+            onClick={() => setFiltersOpen((prev) => !prev)}
           >
-            {window.innerWidth > 600 ? 'Filters' : ''}
+            Filters
           </Button>
-          <Button
-            startIcon={<Refresh />}
-            variant="outlined"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            size="small"
-          >
-            {window.innerWidth > 600 ? 'Refresh' : ''}
+
+          <Button startIcon={<Refresh />} variant="outlined" size="small" onClick={handleRefresh}>
+            Refresh
           </Button>
         </Box>
       </Box>
 
+      {/* FILTER PANEL */}
       <Collapse in={filtersOpen}>
         <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>Filter Videos</Typography>
-          <Grid container spacing={0.5}>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            Filter Videos
+          </Typography>
+
+          {/* TOP ROW */}
+          <Grid container spacing={1} sx={{ mb: 2 }}>
+            <Grid size={{ xs: 12, sm: 4 }} item>
+              <Button
+                variant={isRecording ? 'contained' : 'outlined'}
+                startIcon={<Mic />}
+                onClick={() => (isRecording ? stopRecording() : startRecording())}
+                disabled={isUploadingVoice}
+                fullWidth
+              >
+                {isRecording ? 'Stop & Transcribe' : isUploadingVoice ? 'Processing...' : 'Voice Search'}
+              </Button>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 4 }} item>
+              <input
+                ref={jdInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                onChange={handleJdFileSelected}
+                style={{ display: 'none' }}
+              />
+              <Button
+                variant="outlined"
+                startIcon={<UploadFile />}
+                onClick={() => jdInputRef.current?.click()}
+                disabled={isUploadingJD}
+                fullWidth
+              >
+                {isUploadingJD ? 'Extracting...' : 'Upload JD'}
+              </Button>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 4 }} item>
               <TextField
                 fullWidth
-                label="Keywords in transcription"
+                label="Extracted / Transcription text"
                 value={filters.transcriptionKeywords}
-                onChange={(e) => handleFilterChange('transcriptionKeywords', e.target.value)}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <TextField
-                fullWidth
-                label="Key Skills"
-                value={filters.keyskills}
-                onChange={(e) => handleFilterChange('keyskills', e.target.value)}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>Experience</InputLabel>
-                <Select
-                  value={filters.experience}
-                  label="Experience"
-                  onChange={(e) => handleFilterChange('experience', e.target.value)}
-                >
-                  <MenuItem value="">All</MenuItem>
-                  <MenuItem value="0-1">0-1 years</MenuItem>
-                  <MenuItem value="2-3">2-3 years</MenuItem>
-                  <MenuItem value="5-10">5-10 years</MenuItem>
-                  <MenuItem value="10+">Above 10 years</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>Industry</InputLabel>
-                <Select
-                  value={filters.industry}
-                  label="Industry"
-                  onChange={(e) => handleFilterChange('industry', e.target.value)}
-                >
-                  <MenuItem value="">All</MenuItem>
-                  {industryOptions.map((industry) => (
-                    <MenuItem key={industry} value={industry}>
-                      {industry}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>City</InputLabel>
-                <Select
-                  value={filters.city}
-                  label="City"
-                  onChange={(e) => handleFilterChange('city', e.target.value)}
-                >
-                  <MenuItem value="">All</MenuItem>
-                  {cityOptions.map((city) => (
-                    <MenuItem key={city} value={city}>
-                      {city}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <TextField
-                fullWidth
-                label="College"
-                value={filters.college}
-                onChange={(e) => handleFilterChange('college', e.target.value)}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <TextField
-                fullWidth
-                label="Job ID"
-                value={filters.jobid}
-                onChange={(e) => handleFilterChange('jobid', e.target.value)}
+                onChange={(e) =>
+                  handleFilterChange('transcriptionKeywords', e.target.value)
+                }
+                multiline
+                minRows={1}
+                maxRows={6}
               />
             </Grid>
           </Grid>
+
+          {/* BUTTONS */}
           <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
-            <Button
-              variant="contained"
-              onClick={applyFilters}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Applying...' : 'Apply Filters'}
+            <Button variant="contained" onClick={applyFilters}>
+              Apply Filters
             </Button>
             <Button variant="outlined" onClick={clearFilters}>
               Clear All
@@ -430,66 +604,60 @@ export default function Videos() {
         </Paper>
       </Collapse>
 
+      {/* ERRORS */}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
+      {/* VIDEO GRID — YOUR ORIGINAL LAYOUT KEPT */}
       <Grid container spacing={0.5}>
         {isLoading ? (
-          Array(12).fill().map((_, index) => (
-            <Grid size={{ xs: 4, lg: 3 }} key={index}>
-              <VideoSkeleton />
-            </Grid>
-          ))
+          Array(12)
+            .fill()
+            .map((_, index) => (
+              <Grid size={{ xs: 4, lg: 3 }} item key={index}>
+                <VideoSkeleton />
+              </Grid>
+            ))
         ) : (
           displayVideos.map((video, index) => (
-            <Grid size={{ xs: 4, lg: 3 }} key={video.id}>
+            <Grid size={{ xs: 4, lg: 3 }} item key={video.id}>
               <VideoCard
                 video={video}
+                isSearchResult={isFilteredResults}
                 onClick={() => handleVideoClick(video, index)}
               />
+
             </Grid>
           ))
         )}
 
-        {isLoadingMore && (
-          Array(8).fill().map((_, index) => (
-            <Grid size={{ xs: 4, lg: 3 }} key={`loading-${index}`}>
-              <VideoSkeleton />
-            </Grid>
-          ))
-        )}
+        {isLoadingMore &&
+          Array(8)
+            .fill()
+            .map((_, index) => (
+              <Grid size={{ xs: 4, lg: 3 }} item key={index}>
+                <VideoSkeleton />
+              </Grid>
+            ))}
       </Grid>
 
+      {/* NO VIDEOS */}
       {!isLoading && displayVideos.length === 0 && (
         <Box sx={{ textAlign: 'center', mt: 4 }}>
-          <Typography variant="h6" color="text.secondary">
-            {Object.values(filters).some(val => val.trim() !== '')
-              ? 'No videos found matching your filters'
-              : jobid ? 'No videos available for this job' : 'No videos available'
-            }
-          </Typography>
+          <Typography>No videos found</Typography>
         </Box>
       )}
 
-      {isLoadingMore && displayVideos.length > 0 && (
-        <Box sx={{ textAlign: 'center', mt: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Loading more videos...
-          </Typography>
-        </Box>
-      )}
-
+      {/* SNACKBAR */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={handleSnackbarClose}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       >
-        <Alert onClose={handleSnackbarClose} severity={snackbar.severity}>
-          {snackbar.message}
-        </Alert>
+        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
       </Snackbar>
     </Box>
   );

@@ -9,7 +9,7 @@ export default defineConfig({
     proxy: {
       // String shorthand for simple cases
       '/api': {
-        target: 'http://wezume.in:8081',
+        target: 'https://app.wezume.in',
         changeOrigin: true,
         secure: false,      
       }

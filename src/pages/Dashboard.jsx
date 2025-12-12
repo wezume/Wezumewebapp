@@ -109,7 +109,7 @@ export default function Dashboard() {
   const [displayVideos, setDisplayVideos] = useState([]);
   const [initialized, setInitialized] = useState(false);
   const [showStudentTable, setShowStudentTable] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState("C191");
+  const [selectedFilter, setSelectedFilter] = useState(userDetails?.jobid);
   const [sortOrder, setSortOrder] = useState("asc");
   const [sortBy, setSortBy] = useState("name");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
@@ -484,7 +484,7 @@ export default function Dashboard() {
                       }}
                     >
                       <MenuItem
-                        value="C191"
+                        value={userDetails?.jobid}
                         sx={{
                           fontSize: "0.8rem",
                           fontWeight: "500",
@@ -503,7 +503,7 @@ export default function Dashboard() {
                           },
                         }}
                       >
-                        C191
+                       {userDetails?.jobid}
                       </MenuItem>
                     </Select>
                   </FormControl>
@@ -514,7 +514,6 @@ export default function Dashboard() {
 
           <Grid size={{ xs: 4, md: 4 }}>
             <Card
-              onClick={handleStudentCardClick}
               sx={{
                 borderRadius: "12px",
                 background: "linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)",

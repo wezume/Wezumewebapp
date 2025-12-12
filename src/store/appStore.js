@@ -77,7 +77,8 @@ export const useAppStore = create(
           const { token, jobOption } = response.data
           
           const allowedJobOptions = ['Employer', 'Investor', 'placementDrive', 'Academy']
-          
+          console.log("JOB OPTION FROM BACKEND:", jobOption);
+
           if (!allowedJobOptions.includes(jobOption)) {
             set({ 
               isLoading: false,

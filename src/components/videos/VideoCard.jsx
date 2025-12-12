@@ -23,20 +23,18 @@ import axiosInstance from "../../axios/axios";
 import { useAppStore } from "../../store/appStore";
 import CountUp from "react-countup";
 
-export default function VideoCard({ video, onClick }) {
+export default function VideoCard({ video, onClick, isSearchResult }) {
   const [hovered, setHovered] = useState(false);
   const [likes, setLikes] = useState(0);
   const [totalScore, setTotalScore] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
   const [likesLoaded, setLikesLoaded] = useState(false);
   const [scoreLoaded, setScoreLoaded] = useState(false);
-  const [touched, setTouched] = useState(false);
 
   const { userDetails } = useAppStore();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
 
   const hashVideoId = (id) => btoa(id.toString());
 
@@ -51,9 +49,7 @@ export default function VideoCard({ video, onClick }) {
           likedVideosMap[videoId] = liked;
         });
         setIsLiked(likedVideosMap[video.id] || false);
-      } catch (error) {
-        // console.error("Error fetching user liked videos:", error);
-      }
+      } catch (error) {}
     };
 
     if (userDetails?.userId) {
@@ -67,9 +63,7 @@ export default function VideoCard({ video, onClick }) {
         const likesRes = await axiosInstance.get(`/videos/${video.id}/like-count`);
         setLikes(likesRes.data);
         setLikesLoaded(true);
-      } catch (error) {
-        // console.error("Error fetching likes:", error);
-      }
+      } catch (error) {}
     }
   };
 
@@ -80,41 +74,19 @@ export default function VideoCard({ video, onClick }) {
         setTotalScore(scoreRes.data);
         setScoreLoaded(true);
       } catch (error) {
-        // console.error("Error fetching score:", error);
         setScoreLoaded(true);
       }
     }
   };
 
   const handleInteraction = async () => {
-    if (isMobile) {
-      setTouched(!touched);
-    } else {
-      setHovered(true);
-    }
-
+    if (!isMobile) setHovered(true);
     fetchLikes();
     fetchScore();
   };
 
-  const handleMouseEnter = () => {
-    if (!isMobile) {
-      handleInteraction();
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (!isMobile) {
-      setHovered(false);
-    }
-  };
-
-  const handleTouchStart = (e) => {
-    if (isMobile) {
-      e.preventDefault();
-      handleInteraction();
-    }
-  };
+  const handleMouseEnter = () => !isMobile && handleInteraction();
+  const handleMouseLeave = () => !isMobile && setHovered(false);
 
   const handleLike = async (e) => {
     e.stopPropagation();
@@ -133,21 +105,11 @@ export default function VideoCard({ video, onClick }) {
   };
 
   const handleClick = () => {
-    if (isMobile && !touched) {
-      handleInteraction();
-      return;
-    }
-
-    // Use the provided onClick prop if available, otherwise fallback to default navigation
-    if (onClick) {
-      onClick();
-    } else {
-      // Fallback to default navigation (shouldn't happen with new implementation)
-      navigate(`/app/video/${hashVideoId(video.id)}`);
-    }
+    if (onClick) onClick();
+    else navigate(`/app/video/${hashVideoId(video.id)}`);
   };
 
-  const showSlide = isMobile ? touched : hovered;
+  const showSlide = isMobile ? false : hovered;
 
   return (
     <Card
@@ -165,20 +127,37 @@ export default function VideoCard({ video, onClick }) {
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onTouchStart={handleTouchStart}
       onClick={handleClick}
     >
       <CardMedia
         component="img"
         image={video?.thumbnail}
         alt="Video thumbnail"
-        sx={{
-          objectFit: "cover",
-          width: "100%",
-          height: "100%",
-        }}
+        sx={{ objectFit: "cover", width: "100%", height: "100%" }}
       />
 
+      {/* ⭐ CONFIDENCE BADGE — SHOWS ONLY IF SEARCH RESULTS + confidence returned */}
+      {isSearchResult && video?.confidence !== undefined && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            backgroundColor: "rgba(0,0,0,0.75)",
+            padding: "4px 10px",
+            borderRadius: "14px",
+            zIndex: 20,
+            color: "white",
+            fontSize: { xs: "0.7rem", md: "0.85rem" },
+            fontWeight: 700,
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          {Number(video.confidence).toFixed(1)}%
+        </Box>
+      )}
+
+      {/* Play Icon */}
       <Box
         sx={{
           position: "absolute",
@@ -190,35 +169,21 @@ export default function VideoCard({ video, onClick }) {
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: "rgba(0, 0, 0, 0.4)",
-          zIndex: 1,
-          transition: "opacity 0.3s ease-in-out",
           opacity: showSlide ? 0.6 : 1,
+          transition: "opacity 0.3s ease-in-out",
+          zIndex: 1,
         }}
       >
         <PlayArrow
           sx={{
-            fontSize: {
-              xs: 32,
-              sm: 40,
-              md: 50,
-              lg: 60,
-            },
+            fontSize: { xs: 32, sm: 40, md: 50 },
             color: "white",
-            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
           }}
         />
       </Box>
 
-      <Slide
-        direction="up"
-        in={showSlide}
-        mountOnEnter
-        unmountOnExit
-        timeout={{
-          enter: 300,
-          exit: 200,
-        }}
-      >
+      {/* SLIDE-UP SECTION */}
+      <Slide direction="up" in={showSlide} mountOnEnter unmountOnExit>
         <Box
           sx={{
             position: "absolute",
@@ -228,116 +193,65 @@ export default function VideoCard({ video, onClick }) {
             color: "white",
             background:
               "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)",
-            ...(isMobile ? {} : { backdropFilter: "blur(4px)" }),
             p: { xs: 1, sm: 1.5, md: 2 },
             zIndex: 2,
           }}
         >
+          {/* PROFILE AREA */}
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              mb: { xs: 0.5, sm: 1, md: 1.5 },
+              mb: 1,
             }}
           >
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: { xs: 0.5, sm: 1 },
-              }}
-            >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Avatar
                 src={video?.profilepic || video?.profilePic}
-                alt={video?.firstname || video?.firstName}
-                sx={{
-                  width: { xs: 24, sm: 28, md: 32 },
-                  height: { xs: 24, sm: 28, md: 32 },
-                }}
+                alt={video?.firstname}
+                sx={{ width: 28, height: 28 }}
               >
-                {!video?.profilepic && !video?.profilePic && <Person />}
+                {!video?.profilepic && <Person />}
               </Avatar>
-              <Typography 
-                variant="subtitle2" 
-                fontWeight="bold" 
-                noWrap
-                sx={{
-                  fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
-                  maxWidth: { xs: '120px', sm: '150px', md: '200px' }
-                }}
-              >
-                {isMobile && ((video?.firstname || video?.firstName) || '').length > 8 
-                  ? `${((video?.firstname || video?.firstName) || '').substring(0, 8)}...`
-                  : (video?.firstname || video?.firstName) || ''
-                }
+              <Typography variant="subtitle2" fontWeight="bold" noWrap>
+                {video?.firstname}
               </Typography>
             </Box>
+
             <Box
               component="img"
               src="/logo-favicon.png"
-              alt="Wezume Logo"
-              sx={{
-                height: { xs: 16, sm: 20, md: 24 },
-                width: { xs: 16, sm: 20, md: 24 },
-              }}
+              sx={{ width: 20, height: 20 }}
             />
           </Box>
 
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 1,
-            }}
-          >
+          {/* LIKES + SCORE */}
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {/* Likes */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               <IconButton
                 onClick={handleLike}
-                size={isMobile ? "small" : "medium"}
+                size="small"
                 sx={{
                   color: isLiked ? "error.main" : "white",
-                  "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-                  p: { xs: 0.5, sm: 1 },
                 }}
-                aria-label={isLiked ? "Unlike video" : "Like video"}
               >
-                {isLiked ? (
-                  <Favorite sx={{ fontSize: { xs: 16, sm: 18, md: 20 } }} />
-                ) : (
-                  <FavoriteBorder
-                    sx={{ fontSize: { xs: 16, sm: 18, md: 20 } }}
-                  />
-                )}
+                {isLiked ? <Favorite /> : <FavoriteBorder />}
               </IconButton>
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 500,
-                  fontSize: { xs: "0.7rem", sm: "0.8rem", md: "0.875rem" },
-                }}
-              >
+
+              <Typography variant="body2">
                 {likesLoaded ? <CountUp end={likes} duration={1} /> : "..."}
               </Typography>
             </Box>
 
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: { xs: 0.5, sm: 1 },
-              }}
-            >
-              <Assessment sx={{ fontSize: { xs: 16, sm: 18, md: 20 } }} />
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 500,
-                  fontSize: { xs: "0.7rem", sm: "0.8rem", md: "0.875rem" },
-                }}
-              >
-                {scoreLoaded ? (totalScore?.totalScore?.toFixed(1) || "N/A") : "..."}
+            {/* ⭐ SCORE ICON (NOT CONFIDENCE — your existing total score) */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Assessment sx={{ fontSize: 20 }} />
+              <Typography variant="body2">
+                {scoreLoaded
+                  ? (totalScore?.totalScore?.toFixed(1) || "N/A")
+                  : "..."}
               </Typography>
             </Box>
           </Box>
