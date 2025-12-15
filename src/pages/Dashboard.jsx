@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Box,
   Card,
@@ -36,6 +36,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppStore } from "../store/appStore";
 import VideoCard from "../components/videos/VideoCard";
 import VideoSkeleton from "../components/videos/VideoSkeleton";
+import apiClient from '../axios/axios';
+import { Mic, UploadFile, Search as SearchIcon } from "@mui/icons-material";
+import { TextField } from "@mui/material";
 
 const AnimatedCounter = ({ end, duration = 2000, suffix = "" }) => {
   const [count, setCount] = useState(0);
@@ -77,6 +80,68 @@ const storeVideosForNavigation = (videos, listType) => {
   }
 };
 
+// --- WAV ENCODER ---
+const encodeWAV = (audioBlob) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return reject(new Error('AudioContext not supported'));
+      const audioContext = new AudioCtx();
+      const fileReader = new FileReader();
+
+      fileReader.onload = function () {
+        audioContext.decodeAudioData(this.result)
+          .then(buffer => {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const totalLength = buffer.length * numChannels * 2 + 44;
+            const view = new DataView(new ArrayBuffer(totalLength));
+            let offset = 0;
+            const writeString = (str) => {
+              for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+              }
+              offset += str.length;
+            };
+
+            writeString('RIFF');
+            view.setUint32(offset, totalLength - 8, true); offset += 4;
+            writeString('WAVE');
+
+            writeString('fmt ');
+            view.setUint32(offset, 16, true); offset += 4;
+            view.setUint16(offset, 1, true); offset += 2;
+            view.setUint16(offset, numChannels, true); offset += 2;
+            view.setUint32(offset, sampleRate, true); offset += 4;
+            view.setUint32(offset, sampleRate * numChannels * 2, true); offset += 4;
+            view.setUint16(offset, numChannels * 2, true); offset += 2;
+            view.setUint16(offset, 16, true); offset += 2;
+
+            writeString('data');
+            view.setUint32(offset, buffer.length * numChannels * 2, true); offset += 4;
+
+            for (let i = 0; i < buffer.length; i++) {
+              for (let channel = 0; channel < numChannels; channel++) {
+                const s = buffer.getChannelData(channel)[i];
+                const val = s < 0 ? s * 0x8000 : s * 0x7fff;
+                view.setInt16(offset, val, true);
+                offset += 2;
+              }
+            }
+
+            resolve(new Blob([view.buffer], { type: 'audio/wav' }));
+          })
+          .catch(err => reject(new Error('Audio decode failed: ' + err)));
+      };
+
+      fileReader.onerror = () => reject(new Error('FileReader failed'));
+      fileReader.readAsArrayBuffer(audioBlob);
+    } catch (e) {
+      reject(new Error('WAV encoding failed: ' + e.message));
+    }
+  });
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -114,11 +179,25 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState("name");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
 
+  // Advance Search State
+  const [transcriptionKeywords, setTranscriptionKeywords] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [isUploadingJD, setIsUploadingJD] = useState(false);
+  const [advanceSearchVideos, setAdvanceSearchVideos] = useState([]);
+  const [isAdvanceSearchLoading, setIsAdvanceSearchLoading] = useState(false);
+
+  // Refs for recording
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const audioStreamRef = useRef(null);
+  const jdInputRef = useRef(null);
+
   const isPlacementOrAcademy = userDetails?.jobOption === "placementDrive" || userDetails?.jobOption === "Academy";
 
   const getActiveTabFromURL = () => {
     const urlTab = searchParams.get('tab');
-    if (urlTab && ['liked', 'commented', 'videos'].includes(urlTab)) {
+    if (urlTab && ['liked', 'commented', 'videos', 'advanceSearch'].includes(urlTab)) {
       return urlTab === 'videos' ? 'job' : urlTab;
     }
     return isPlacementOrAcademy ? "job" : "liked";
@@ -158,19 +237,23 @@ export default function Dashboard() {
   const handleVideoClick = (video, index) => {
     let videoSource = '';
     let videoList = [];
-    
+
     switch (activeTab) {
       case 'liked':
         videoSource = 'liked';
         videoList = likedVideos;
         break;
       case 'commented':
-        videoSource = 'commented'; 
+        videoSource = 'commented';
         videoList = commentedVideos;
         break;
       case 'job':
         videoSource = 'videos';
         videoList = videos;
+        break;
+      case 'advanceSearch':
+        videoSource = 'advanceSearch';
+        videoList = advanceSearchVideos;
         break;
       default:
         videoSource = 'videos';
@@ -187,7 +270,7 @@ export default function Dashboard() {
 
     const hashedId = btoa(video.id.toString());
     navigate(`/app/video/${hashedId}`, {
-      state: { 
+      state: {
         from: '/app/dashboard',
         source: videoSource,
         videoList: videoList,
@@ -266,7 +349,7 @@ export default function Dashboard() {
     if (initialized) {
       updateDisplayVideos();
     }
-  }, [activeTab, likedVideos, commentedVideos, videos, initialized]);
+  }, [activeTab, likedVideos, commentedVideos, videos, initialized, advanceSearchVideos]);
 
   const updateDisplayVideos = () => {
     switch (activeTab) {
@@ -290,6 +373,12 @@ export default function Dashboard() {
           }
         } else {
           setDisplayVideos([]);
+        }
+        break;
+      case "advanceSearch":
+        setDisplayVideos(advanceSearchVideos);
+        if (advanceSearchVideos && advanceSearchVideos.length > 0) {
+          storeVideosForNavigation(advanceSearchVideos, 'advanceSearch');
         }
         break;
       default:
@@ -366,6 +455,8 @@ export default function Dashboard() {
         return isPlacementOrAcademy
           ? "Videos"
           : `Videos${userDetails?.jobid ? ` (Job ID: ${userDetails.jobid})` : ""}`;
+      case "advanceSearch":
+        return "Advance Search";
       default:
         return "Videos";
     }
@@ -379,10 +470,218 @@ export default function Dashboard() {
         return isLoadingCommentedVideos;
       case "job":
         return isLoadingVideos;
+      case "advanceSearch":
+        return isAdvanceSearchLoading;
       default:
         return false;
     }
   };
+
+  const showSnackbar = (message, severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  // --- Voice Recording Logic ---
+  const getSupportedMimeType = () => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+    ];
+    for (const t of types) {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return '';
+  };
+
+  const startRecording = async () => {
+    if (isRecording) return;
+
+    try {
+      const mimeType = getSupportedMimeType();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          noiseSuppression: true,
+          echoCancellation: true,
+        },
+      });
+
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = (e) => {
+        showSnackbar('Recording error: ' + (e?.message || 'unknown'), 'error');
+        try { stopRecording(); } catch { }
+      };
+
+      recorder.onstop = async () => {
+        try { audioStreamRef.current.getTracks().forEach((t) => t.stop()); } catch { }
+
+        if (!audioChunksRef.current.length) {
+          showSnackbar('No voice captured. Try speaking louder.', 'error');
+          setIsRecording(false);
+          return;
+        }
+
+        let blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
+        try {
+          blob = await encodeWAV(blob);
+        } catch (err) {
+          console.warn('WAV conversion skipped:', err);
+        }
+
+        await sendAudioForTranscription(blob);
+        setIsRecording(false);
+      };
+
+      recorder.start(500);
+      setIsRecording(true);
+      showSnackbar('Recording started...', 'info');
+    } catch (err) {
+      console.error('Microphone access failed:', err);
+      showSnackbar('Microphone access failed.', 'error');
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state === 'recording') {
+      rec.stop();
+      setIsRecording(false);
+    } else {
+      if (audioStreamRef.current) {
+        try { audioStreamRef.current.getTracks().forEach((t) => t.stop()); } catch { }
+      }
+      setIsRecording(false);
+    }
+  };
+
+  const sendAudioForTranscription = async (blob) => {
+    setIsUploadingVoice(true);
+    try {
+      const formData = new FormData();
+      const filename = `voice_${Date.now()}.wav`;
+      formData.append('file', new File([blob], filename, { type: 'audio/wav' }));
+      if (userDetails?.userId) {
+        formData.append('userId', userDetails.userId);
+      }
+
+      showSnackbar('Uploading audio...', 'info');
+
+      const res = await apiClient.post('/search/upload-voice-search', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const transcription = (res.data && (res.data.transcription || res.data.text || res.data)) || '';
+      const transcriptionText = typeof transcription === 'string' ? transcription : JSON.stringify(transcription);
+
+      if (!transcriptionText || !String(transcriptionText).trim()) {
+        showSnackbar('Transcription returned empty.', 'warning');
+        setIsUploadingVoice(false);
+        return;
+      }
+
+      setTranscriptionKeywords(transcriptionText);
+      showSnackbar('Transcription ready.', 'success');
+    } catch (e) {
+      console.error('Transcription upload failed:', e);
+      showSnackbar('Transcription failed.', 'error');
+    }
+    setIsUploadingVoice(false);
+  };
+
+  // --- JD / File Logic ---
+  const handleJdFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingJD(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (userDetails?.userId) {
+        formData.append('userId', userDetails.userId);
+      }
+
+      const res = await apiClient.post('/search/jd', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      let transcription = '';
+      if (res.data) {
+        if (res.data.transcription) transcription = res.data.transcription;
+        else {
+          const { title, skills, description } = res.data || {};
+          transcription =
+            (title || '') +
+            (Array.isArray(skills) ? '\n' + skills.join(', ') : skills ? '\n' + skills : '') +
+            (description ? '\n' + description : '');
+        }
+      }
+
+      if (!transcription || !String(transcription).trim()) {
+        showSnackbar('No readable content extracted from JD.', 'warning');
+        setIsUploadingJD(false);
+        if (jdInputRef.current) jdInputRef.current.value = '';
+        return;
+      }
+
+      setTranscriptionKeywords(transcription);
+      showSnackbar('JD extracted.', 'success');
+    } catch (e) {
+      console.error('JD Upload Failed:', e);
+      showSnackbar('JD extraction failed.', 'error');
+    }
+    setIsUploadingJD(false);
+    if (jdInputRef.current) jdInputRef.current.value = '';
+  };
+
+  // --- Advance Search Execution ---
+  const handleAdvanceSearch = async () => {
+    if (!transcriptionKeywords.trim()) {
+      showSnackbar('Please enter some keywords or use voice/JD.', 'warning');
+      return;
+    }
+
+    setIsAdvanceSearchLoading(true);
+    setAdvanceSearchVideos([]);
+
+    try {
+      const params = new URLSearchParams();
+      params.append('userId', userDetails?.userId ?? '');
+      params.append('transcription', transcriptionKeywords);
+
+      const res = await apiClient.post('/search/voice', params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      if (Array.isArray(res.data)) {
+        setAdvanceSearchVideos(res.data);
+        showSnackbar(`Found ${res.data.length} videos`, 'success');
+      } else {
+        const list = res.data?.results || res.data?.videos || [];
+        setAdvanceSearchVideos(Array.isArray(list) ? list : []);
+        showSnackbar(`Search completed`, 'success');
+      }
+    } catch (e) {
+      console.error('Advance search failed:', e);
+      showSnackbar('Search failed: ' + (e?.message || 'Server error'), 'error');
+    }
+    setIsAdvanceSearchLoading(false);
+  };
+
 
   const renderTabCards = () => {
     if (isPlacementOrAcademy) {
@@ -503,7 +802,7 @@ export default function Dashboard() {
                           },
                         }}
                       >
-                       {userDetails?.jobid}
+                        {userDetails?.jobid}
                       </MenuItem>
                     </Select>
                   </FormControl>
@@ -660,7 +959,7 @@ export default function Dashboard() {
     } else {
       return (
         <Grid container spacing={2}>
-          <Grid size={{ xs: 4, md: 4 }}>
+          <Grid size={{ xs: 6, md: 3 }}>
             <Card
               onClick={() => handleTabClick("liked")}
               sx={{
@@ -736,7 +1035,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 4, md: 4 }}>
+          <Grid size={{ xs: 6, md: 3 }}>
             <Card
               onClick={() => handleTabClick("commented")}
               sx={{
@@ -812,7 +1111,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 4, md: 4 }}>
+          <Grid size={{ xs: 6, md: 3 }}>
             <Card
               onClick={() => handleTabClick("job")}
               sx={{
@@ -882,6 +1181,82 @@ export default function Dashboard() {
                     }}
                   >
                     Videos
+                  </Typography>
+                </Box>
+              </Box>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Card
+              onClick={() => handleTabClick("advanceSearch")}
+              sx={{
+                borderRadius: "12px",
+                border: activeTab === "advanceSearch" ? "2px solid #8b5cf6" : "1px solid #e2e8f0",
+                background:
+                  activeTab === "advanceSearch"
+                    ? "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)"
+                    : "#ffffff",
+                boxShadow:
+                  activeTab === "advanceSearch"
+                    ? "0 4px 12px rgba(139, 92, 246, 0.3)"
+                    : "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
+                transition: "all 0.3s ease",
+                cursor: "pointer",
+                height: { xs: 100, sm: 120, md: 140 },
+                "&:hover": {
+                  boxShadow: {
+                    xs: activeTab === "advanceSearch"
+                      ? "0 4px 12px rgba(139, 92, 246, 0.3)"
+                      : "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
+                    md: "0 4px 12px 0 rgba(0, 0, 0, 0.1)",
+                  },
+                  transform: { xs: "none", md: "translateY(-2px)" },
+                  backgroundColor:
+                    activeTab === "advanceSearch"
+                      ? "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)"
+                      : "#f8fafc",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  p: { xs: 1.5, sm: 2, md: 2.5 },
+                  gap: { xs: 1, sm: 1.5, md: 2 },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: { xs: 48, sm: 56, md: 64 },
+                    height: { xs: 48, sm: 56, md: 64 },
+                    borderRadius: "12px",
+                    background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 4px 12px rgba(139, 92, 246, 0.3)",
+                  }}
+                >
+                  <SearchIcon sx={{ color: "white", fontSize: { xs: "1.5rem", sm: "1.75rem", md: "2rem" } }} />
+                </Box>
+
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: "600",
+                      fontSize: { xs: "0.75rem", sm: "0.875rem", md: "1rem" },
+                      color: "#1e293b",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Advance Search
                   </Typography>
                 </Box>
               </Box>
@@ -1041,22 +1416,212 @@ export default function Dashboard() {
           </Box>
         ) : (
           <Box>
-            <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+            <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap", justifyContent: "space-between" }}>
               <Typography variant="h6" sx={{ fontWeight: "600", color: "#1e293b", mb: 1 }}>
                 {getTabTitle()}
               </Typography>
-              {/* {activeTab === "liked" && (
-                <Button
-                  startIcon={<Refresh />}
-                  variant="outlined"
-                  onClick={handleRefresh}
-                  disabled={isLoadingLikedVideos}
-                  size="small"
-                >
-                  {isLoadingLikedVideos ? "Refreshing..." : "Refresh"}
-                </Button>
-              )} */}
             </Box>
+
+            {activeTab === "advanceSearch" && (
+              <Paper
+                sx={{
+                  p: { xs: 3, md: 4 },
+                  mb: 4,
+                  borderRadius: 4,
+                  background: "linear-gradient(135deg, #ffffff 30%, #e0f2fe 100%)",
+                  boxShadow: "0 8px 32px rgba(37,99,235,0.08)",
+                  border: "1px solid rgba(255,255,255,0.8)",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {/* Decorative background blurs */}
+                <Box
+                  sx={{
+                    position: "absolute",
+                    top: -60,
+                    right: -60,
+                    width: 300,
+                    height: 300,
+                    background: "radial-gradient(circle, rgba(37,99,235,0.12) 0%, rgba(255,255,255,0) 70%)",
+                    zIndex: 0,
+                    filter: "blur(20px)",
+                  }}
+                />
+                <Box
+                  sx={{
+                    position: "absolute",
+                    bottom: -40,
+                    left: -40,
+                    width: 250,
+                    height: 250,
+                    background: "radial-gradient(circle, rgba(147,51,234,0.05) 0%, rgba(255,255,255,0) 70%)",
+                    zIndex: 0,
+                    filter: "blur(20px)",
+                  }}
+                />
+
+                <Box sx={{ position: "relative", zIndex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: "#0f172a", display: "flex", alignItems: "center", gap: 1.5 }}>
+                    <Box
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: "50%",
+                        bgcolor: "primary.main",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 2px 8px rgba(37,99,235,0.25)"
+                      }}
+                    >
+                      <SearchIcon sx={{ color: "white", fontSize: 18 }} />
+                    </Box>
+                    Advanced Search Intelligence
+                  </Typography>
+
+                  <Grid container spacing={3}>
+                    {/* Main Input Area */}
+                    <Grid size={{ xs: 12, md: 8 }}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        minRows={4}
+                        placeholder="Type keywords, candidate skills, or transcript text here..."
+                        value={transcriptionKeywords}
+                        onChange={(e) => setTranscriptionKeywords(e.target.value)}
+                        variant="outlined"
+                        sx={{
+                          "& .MuiOutlinedInput-root": {
+                            borderRadius: 3,
+                            backgroundColor: "#ffffff",
+                            transition: "all 0.2s ease-in-out",
+                            "&:hover": {
+                              borderColor: "primary.light",
+                              boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
+                            },
+                            "&.Mui-focused": {
+                              boxShadow: "0 4px 12px rgba(37,99,235,0.1)",
+                            }
+                          }
+                        }}
+                      />
+                      <Typography variant="caption" sx={{ color: "#64748b", mt: 1, display: "block", ml: 1 }}>
+                        • Use key phrases from job descriptions  • Paste interview transcripts  • Type specific skills
+                      </Typography>
+                    </Grid>
+
+                    {/* Action Panel */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%" }}>
+                        {/* Voice Search Button */}
+                        <Button
+                          variant={isRecording ? "contained" : "outlined"}
+                          onClick={() => isRecording ? stopRecording() : startRecording()}
+                          disabled={isUploadingVoice}
+                          fullWidth
+                          startIcon={
+                            isRecording ? (
+                              <Box sx={{
+                                width: 10, height: 10, borderRadius: "50%", bgcolor: "white",
+                                animation: "pulse 1.5s infinite"
+                              }} />
+                            ) : <Mic />
+                          }
+                          sx={{
+                            borderRadius: 2.5,
+                            py: 1.5,
+                            justifyContent: "flex-start",
+                            px: 3,
+                            textAlign: "left",
+                            bgcolor: isRecording ? "error.main" : "transparent",
+                            borderColor: isRecording ? "error.main" : "divider",
+                            color: isRecording ? "white" : "text.primary",
+                            "&:hover": {
+                              bgcolor: isRecording ? "error.dark" : "action.hover",
+                            },
+                            "@keyframes pulse": {
+                              "0%": { boxShadow: "0 0 0 0 rgba(255, 255, 255, 0.7)" },
+                              "70%": { boxShadow: "0 0 0 10px rgba(255, 255, 255, 0)" },
+                              "100%": { boxShadow: "0 0 0 0 rgba(255, 255, 255, 0)" }
+                            }
+                          }}
+                        >
+                          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", ml: 1 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {isRecording ? "Stop Recording" : "Voice Search"}
+                            </Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                              {isRecording ? "Listening..." : "Speak to search"}
+                            </Typography>
+                          </Box>
+                        </Button>
+
+                        <input
+                          ref={jdInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.txt"
+                          onChange={handleJdFileSelected}
+                          style={{ display: 'none' }}
+                        />
+
+                        {/* Upload Button */}
+                        <Button
+                          variant="outlined"
+                          onClick={() => jdInputRef.current?.click()}
+                          disabled={isUploadingJD}
+                          fullWidth
+                          startIcon={<UploadFile sx={{ color: "primary.main" }} />}
+                          sx={{
+                            borderRadius: 2.5,
+                            py: 1.5,
+                            justifyContent: "flex-start",
+                            px: 3,
+                            borderColor: "divider",
+                            color: "text.primary",
+                            backgroundColor: "white",
+                            "&:hover": { borderColor: "primary.main", bgcolor: "rgba(37,99,235,0.02)" }
+                          }}
+                        >
+                          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", ml: 1 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {isUploadingJD ? 'Extracting...' : 'Upload JD'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Extract from PDF/Doc
+                            </Typography>
+                          </Box>
+                        </Button>
+
+                        {/* Search CTA */}
+                        <Button
+                          variant="contained"
+                          onClick={handleAdvanceSearch}
+                          fullWidth
+                          size="large"
+                          disabled={isAdvanceSearchLoading}
+                          endIcon={isAdvanceSearchLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                          sx={{
+                            mt: "auto",
+                            borderRadius: 2.5,
+                            py: 1.5,
+                            fontWeight: 700,
+                            boxShadow: "0 4px 12px rgba(37,99,235,0.2)",
+                            background: "linear-gradient(to right, #2563eb, #1d4ed8)",
+                            "&:hover": {
+                              boxShadow: "0 6px 16px rgba(37,99,235,0.3)",
+                              transform: "translateY(-1px)"
+                            }
+                          }}
+                        >
+                          {isAdvanceSearchLoading ? "Searching..." : "Find Matching Videos"}
+                        </Button>
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Box>
+              </Paper>
+            )}
 
             {activeTab === "liked" && likedVideoError && (
               <Box sx={{ mb: 3, p: 2, bgcolor: "#fee2e2", borderRadius: 2, border: "1px solid #fca5a5" }}>
@@ -1079,10 +1644,10 @@ export default function Dashboard() {
                         {activeTab === "liked"
                           ? "No liked videos yet"
                           : activeTab === "commented"
-                          ? "No commented videos yet"
-                          : activeTab === "job" && !userDetails?.jobid && !isPlacementOrAcademy
-                          ? "No job ID assigned to your profile"
-                          : "No videos found"}
+                            ? "No commented videos yet"
+                            : activeTab === "job" && !userDetails?.jobid && !isPlacementOrAcademy
+                              ? "No job ID assigned to your profile"
+                              : "No videos found"}
                       </Typography>
 
                       {activeTab === "liked" && (
@@ -1101,20 +1666,21 @@ export default function Dashboard() {
                   <>
                     {isCurrentTabLoading()
                       ? Array(12)
-                          .fill()
-                          .map((_, index) => (
-                            <Grid size={{ xs: 4, lg: 3 }} key={index}>
-                              <VideoSkeleton />
-                            </Grid>
-                          ))
-                      : displayVideos.map((video) => (
-                          <Grid size={{ xs: 4, lg: 3 }} key={video.id}>
-                            <VideoCard 
-                              video={video} 
-                              onClick={() => handleVideoClick(video)}
-                            />
+                        .fill()
+                        .map((_, index) => (
+                          <Grid size={{ xs: 4, lg: 3 }} key={index}>
+                            <VideoSkeleton />
                           </Grid>
-                        ))}
+                        ))
+                      : displayVideos.map((video) => (
+                        <Grid size={{ xs: 4, lg: 3 }} key={video.id}>
+                          <VideoCard
+                            video={video}
+                            isSearchResult={activeTab === "advanceSearch"}
+                            onClick={() => handleVideoClick(video)}
+                          />
+                        </Grid>
+                      ))}
 
                     {isLoadingMoreVideos && (
                       <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
@@ -1139,6 +1705,6 @@ export default function Dashboard() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </Container >
   );
 }
