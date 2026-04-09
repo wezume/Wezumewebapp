@@ -11,6 +11,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Landing from "./pages/Landing";
 import BaseLayout from "./layouts/BaseLayout";
 import Dashboard from "./pages/Dashboard";
+import CultureFitScorer from "./pages/culture";
 import Videos from "./pages/Videos";
 import VideoPlayer from "./components/videos/VideoPlayer";
 import Liked from "./pages/Liked";
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="videos" element={<Videos />} />
           <Route path="video/:videoId" element={<VideoPlayer />} />
           <Route path="liked" element={<Liked />} /> 
+          <Route path="culture" element={<CultureFitScorer />} />
           <Route path="profile" element={<Profile />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>

@@ -37,7 +37,7 @@ import { useAppStore } from "../store/appStore";
 import VideoCard from "../components/videos/VideoCard";
 import VideoSkeleton from "../components/videos/VideoSkeleton";
 import apiClient from '../axios/axios';
-import { Mic, UploadFile, Search as SearchIcon } from "@mui/icons-material";
+import { Mic, UploadFile, Search as SearchIcon, Hub as HubIcon } from "@mui/icons-material";
 import { TextField } from "@mui/material";
 
 const AnimatedCounter = ({ end, duration = 2000, suffix = "" }) => {
@@ -660,18 +660,49 @@ export default function Dashboard() {
 
     try {
       const params = new URLSearchParams();
+      let jobIdParam = selectedFilter || userDetails?.jobid;
+      let transcriptionParam = transcriptionKeywords;
+
+      // Check if transcriptionKeywords looks like a Job ID (alphanumeric, e.g., 'C191')
+      // If so, treat it as a Job ID search
+      if (!jobIdParam && transcriptionKeywords) {
+        // Regex for job ID: starts with letter, followed by numbers (e.g., C191)
+        // Or strictly alphanumeric without spaces
+        const jobIdPattern = /^[A-Za-z][0-9]+$/;
+        const isJobId = jobIdPattern.test(transcriptionKeywords.trim());
+
+        if (isJobId) {
+          jobIdParam = transcriptionKeywords.trim();
+          transcriptionParam = ''; // Clear transcription to search by Job ID only
+        }
+      }
+
+      if (jobIdParam) {
+        params.append('jobId', jobIdParam);
+      }
+
       params.append('userId', userDetails?.userId ?? '');
-      params.append('transcription', transcriptionKeywords);
+      params.append('transcription', transcriptionParam);
+
+      console.log("Advance Search Params:", {
+        userId: userDetails?.userId,
+        transcription: transcriptionParam,
+        jobId: jobIdParam
+      });
+      console.log("Params string:", params.toString());
 
       const res = await apiClient.post('/search/voice', params.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
+
+      console.log("Advance Search Response:", res.data);
 
       if (Array.isArray(res.data)) {
         setAdvanceSearchVideos(res.data);
         showSnackbar(`Found ${res.data.length} videos`, 'success');
       } else {
         const list = res.data?.results || res.data?.videos || [];
+        console.log("Extracted list:", list);
         setAdvanceSearchVideos(Array.isArray(list) ? list : []);
         showSnackbar(`Search completed`, 'success');
       }
@@ -687,7 +718,66 @@ export default function Dashboard() {
     if (isPlacementOrAcademy) {
       return (
         <Grid container spacing={2}>
-          <Grid size={{ xs: 4, md: 4 }}>
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Card
+              onClick={() => navigate("/app/culture")}
+              sx={{
+                borderRadius: "12px",
+                background: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
+                boxShadow: "0 4px 12px rgba(22, 163, 74, 0.3)",
+                transition: "all 0.3s ease",
+                cursor: "pointer",
+                height: { xs: 100, sm: 120, md: 140 },
+                "&:hover": {
+                  boxShadow: "0 6px 16px rgba(22, 163, 74, 0.4)",
+                  transform: { xs: "none", md: "translateY(-2px)" },
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  p: { xs: 1.5, sm: 2, md: 2.5 },
+                  gap: { xs: 1, sm: 1.5, md: 2 },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: { xs: 48, sm: 56, md: 64 },
+                    height: { xs: 48, sm: 56, md: 64 },
+                    borderRadius: "12px",
+                    background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 4px 12px rgba(34, 197, 94, 0.3)",
+                  }}
+                >
+                  <HubIcon sx={{ color: "white", fontSize: { xs: "1.5rem", sm: "1.75rem", md: "2rem" } }} />
+                </Box>
+                <Box>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: "600",
+                      fontSize: { xs: "0.75rem", sm: "0.875rem", md: "1rem" },
+                      color: "#1e293b",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Culture Fit
+                  </Typography>
+                </Box>
+              </Box>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 6, md: 3 }}>
             <Card
               onClick={handleFilterCardClick}
               sx={{
@@ -811,7 +901,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 4, md: 4 }}>
+          <Grid size={{ xs: 6, md: 3 }}>
             <Card
               sx={{
                 borderRadius: "12px",
@@ -886,7 +976,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 4, md: 4 }}>
+          <Grid size={{ xs: 6, md: 3 }}>
             <Card
               sx={{
                 borderRadius: "12px",
@@ -959,7 +1049,7 @@ export default function Dashboard() {
     } else {
       return (
         <Grid container spacing={2}>
-          <Grid size={{ xs: 6, md: 3 }}>
+          <Grid size={{ xs: 6, md: 2.4 }}>
             <Card
               onClick={() => handleTabClick("liked")}
               sx={{
@@ -1035,7 +1125,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 6, md: 3 }}>
+          <Grid size={{ xs: 6, md: 2.4 }}>
             <Card
               onClick={() => handleTabClick("commented")}
               sx={{
@@ -1111,7 +1201,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 6, md: 3 }}>
+          <Grid size={{ xs: 6, md: 2.4 }}>
             <Card
               onClick={() => handleTabClick("job")}
               sx={{
@@ -1187,7 +1277,7 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          <Grid size={{ xs: 6, md: 3 }}>
+          <Grid size={{ xs: 6, md: 2.4 }}>
             <Card
               onClick={() => handleTabClick("advanceSearch")}
               sx={{
@@ -1257,6 +1347,68 @@ export default function Dashboard() {
                     }}
                   >
                     Advance Search
+                  </Typography>
+                </Box>
+              </Box>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 6, md: 2.4 }}>
+            <Card
+              onClick={() => navigate("/app/culture")}
+              sx={{
+                borderRadius: "12px",
+                border: "1px solid #e2e8f0",
+                background: "#ffffff",
+                boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
+                transition: "all 0.3s ease",
+                cursor: "pointer",
+                height: { xs: 100, sm: 120, md: 140 },
+                "&:hover": {
+                  boxShadow: "0 4px 12px 0 rgba(0, 0, 0, 0.1)",
+                  transform: { xs: "none", md: "translateY(-2px)" },
+                  backgroundColor: "#f8fafc",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  p: { xs: 1.5, sm: 2, md: 2.5 },
+                  gap: { xs: 1, sm: 1.5, md: 2 },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: { xs: 48, sm: 56, md: 64 },
+                    height: { xs: 48, sm: 56, md: 64 },
+                    borderRadius: "12px",
+                    background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 4px 12px rgba(34, 197, 94, 0.3)",
+                  }}
+                >
+                  <HubIcon sx={{ color: "white", fontSize: { xs: "1.5rem", sm: "1.75rem", md: "2rem" } }} />
+                </Box>
+
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: "600",
+                      fontSize: { xs: "0.75rem", sm: "0.875rem", md: "1rem" },
+                      color: "#1e293b",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Culture Fit
                   </Typography>
                 </Box>
               </Box>

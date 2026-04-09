@@ -557,7 +557,7 @@ export default function VideoPlayer() {
               fontWeight: 600,
               fontSize: '1.1rem'
             }}>
-            Analysis
+              Analysis
             </Typography>
           </Stack>
           <Divider sx={{ mb: 2 }} />
@@ -645,77 +645,95 @@ export default function VideoPlayer() {
     }
     const loadSingleVideo = async () => {
       // -------------------------------------------------------
-      // 🟢 0. CHECK IF VIDEO ALREADY EXISTS IN ANY LIST
+      // 🟢 0. CHECK IF VIDEO EXISTS IN STORED LIST (e.g. Advance Search results)
       // -------------------------------------------------------
-      const videoAlreadyExists =
-        videos.some(v => v?.id?.toString() === decodedVideoId?.toString()) ||
-        likedVideos.some(v => v?.id?.toString() === decodedVideoId?.toString()) ||
-        commentedVideos.some(v => v?.id?.toString() === decodedVideoId?.toString());
-      let singleVideoData = null;
-      // 🟢 If the video is NOT in any list → fetch by ID
-      if (!videoAlreadyExists) {
-        setVideoLoading(true);
-        singleVideoData = await fetchVideoById(decodedVideoId);
+      const storedList = getStoredVideosForNavigation();
+      const videoSource = location.state?.source || getStoredVideoSource();
+
+      let targetList = [];
+      let videoFromList = null;
+
+      // 1. Try finding in stored list first (Priority 1 - preserves search context/enriched data)
+      if (storedList && storedList.length > 0) {
+        const found = storedList.find(v => v?.id?.toString() === decodedVideoId?.toString());
+        if (found) {
+          targetList = storedList;
+          videoFromList = found;
+        }
       }
+
+      // 2. If not in stored list, try global stores (Priority 2)
+      if (!videoFromList) {
+        if (videos.some(v => v?.id?.toString() === decodedVideoId?.toString())) {
+          targetList = videos;
+          videoFromList = videos.find(v => v.id.toString() === decodedVideoId.toString());
+        } else if (likedVideos.some(v => v?.id?.toString() === decodedVideoId?.toString())) {
+          targetList = likedVideos;
+          videoFromList = likedVideos.find(v => v.id.toString() === decodedVideoId.toString());
+        } else if (commentedVideos.some(v => v?.id?.toString() === decodedVideoId?.toString())) {
+          targetList = commentedVideos;
+          videoFromList = commentedVideos.find(v => v.id.toString() === decodedVideoId.toString());
+        }
+      }
+
       // -------------------------------------------------------
-      // 1. Your SAME LOGIC (UNCHANGED)
+      // 3. Fallback logic
       // -------------------------------------------------------
+
+      // If we found the video in a list, use that list and video
+      if (videoFromList) {
+        setCurrentVideosList(targetList);
+        const foundIndex = targetList.findIndex(v => v.id.toString() === decodedVideoId.toString());
+        setCurrentIndex(foundIndex >= 0 ? foundIndex : 0);
+        loadVideo(videoFromList);
+        setVideoLoading(false);
+        return;
+      }
+
+      // 🟢 If the video is NOT in any list → fetch by ID (Priority 3)
+      setVideoLoading(true);
+      const singleVideoData = await fetchVideoById(decodedVideoId);
+
       if (singleVideoData && singleVideoData.id) {
         setCurrentVideosList([singleVideoData]);
         setCurrentIndex(0);
         loadVideo(singleVideoData);
-        setVideoLoading(false);
-        return;
-      }
-      // -------------------------------------------------------
-      // 2. Fallback logic — SAME AS YOUR CODE (UNCHANGED)
-      // -------------------------------------------------------
-      const videoSource = location.state?.source || getStoredVideoSource();
-      const storedList = getStoredVideosForNavigation();
-      try {
-        let targetList = [];
-        switch (videoSource) {
-          case 'liked':
-            if (likedVideos.length === 0) {
+      } else {
+        // Final attempt to load lists if empty (e.g. page refresh on a specific tab)
+        try {
+          let fetchedList = [];
+          switch (videoSource) {
+            case 'liked':
               await getLikedVideos();
-            }
-            targetList = likedVideos;
-            break;
-          case 'commented':
-            if (commentedVideos.length === 0) {
+              fetchedList = useAppStore.getState().likedVideos;
+              break;
+            case 'commented':
               await getCommentedVideos();
-            }
-            targetList = commentedVideos;
-            break;
-          case 'videos':
-          default:
-            if (videos.length === 0) {
+              fetchedList = useAppStore.getState().commentedVideos;
+              break;
+            case 'videos':
+            default:
               await getVideos();
-            }
-            targetList = videos;
-            break;
-        }
-        const videosList =
-          storedList && storedList.length > 0 ? storedList : targetList;
-        if (videosList && videosList.length > 0) {
-          const foundIndex = videosList.findIndex(
-            (v) => v && v.id && v.id.toString() === decodedVideoId
-          );
-          if (foundIndex >= 0) {
-            const foundVideo = videosList[foundIndex];
-            setCurrentIndex(foundIndex);
-            setCurrentVideosList(videosList);
-            loadVideo(foundVideo);
-          } else {
-            setCurrentIndex(0);
-            setCurrentVideosList(videosList);
-            loadVideo(videosList[0]);
+              fetchedList = useAppStore.getState().videos;
+              break;
           }
+
+          if (fetchedList && fetchedList.length > 0) {
+            const found = fetchedList.find(v => v.id.toString() === decodedVideoId.toString());
+            if (found) {
+              setCurrentVideosList(fetchedList);
+              setCurrentIndex(fetchedList.indexOf(found));
+              loadVideo(found);
+            } else {
+              // Video truly not found
+              setVideo(null);
+            }
+          }
+        } catch (e) {
+          console.error("Error in final fallback", e);
         }
-      } catch (error) {
-        console.error('Error in pagination fallback:', error);
-        setVideoLoading(false);
       }
+      setVideoLoading(false);
     };
     loadSingleVideo();
   }, [decodedVideoId, userDetails, location.state?.source, videos, likedVideos, commentedVideos]);
@@ -1110,8 +1128,9 @@ export default function VideoPlayer() {
     }
   };
   const handleCall = async (event) => {
-    const phoneNumber = video?.phonenumber || video?.phoneNumber;
+    const phoneNumber = video?.phonenumber || video?.phoneNumber || video?.userPhoneNumber;
     if (!phoneNumber) {
+      console.warn("Phone number not found for video:", video);
       showSnackbar("Phone number not available", "warning");
       return;
     }
@@ -1153,8 +1172,13 @@ export default function VideoPlayer() {
     setPhoneAnchorEl(null);
   };
   const handleEmail = () => {
-    if (!video || !video.email) return;
-    window.open(`mailto:${video.email}`);
+    const userEmail = video?.email || video?.userEmail;
+    if (!userEmail) {
+      console.warn("Email not found for video:", video);
+      showSnackbar("Email not available for this user", "warning");
+      return;
+    }
+    window.open(`mailto:${userEmail}`);
   };
   const handleLinkedIn = () => {
     if (!video || !video.linkedinprofile) return;
