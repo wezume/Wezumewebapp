@@ -49,7 +49,7 @@ axiosInstance.interceptors.response.use(
 
       try {
         const res = await axiosInstance.post(
-          '/api/refresh-token',
+          '/refresh-token',
           null,
           { headers: { Authorization: `Bearer ${expiredToken}` }, _retry: true }
         )

@@ -109,7 +109,7 @@ export const useAppStore = create(
           
           return { success: true }
         } catch (error) {
-          const errorMessage = error.response?.data.message || 'Login failed'
+          const errorMessage = error.response?.data?.message || 'Login failed'
           console.log(error)
           set({ 
             isLoading: false, 
