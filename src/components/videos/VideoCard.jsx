@@ -153,7 +153,7 @@ export default function VideoCard({ video, onClick, isSearchResult, cultureFitSc
             backdropFilter: "blur(6px)",
           }}
         >
-          {Number(video.confidence).toFixed(1)}%
+          {Math.round(Number(video.confidence))}%
         </Box>
       )}
 
