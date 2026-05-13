@@ -2075,8 +2075,8 @@ export default function VideoPlayer() {
                   <Typography variant="body2" sx={{ color: "#94a3b8", mt: 1 }}>No culture score data</Typography>
                 )}
               </Box>
-              <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", p: 2 }}>
-                <Box sx={{ width: "100%", maxWidth: 340, aspectRatio: "1/1" }}>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", p: 1.5 }}>
+                <Box sx={{ width: "100%", maxWidth: 260, aspectRatio: "1/1" }}>
                   <CultureFitRadar
                     targetScores={location.state.cultureFit.targets || [3,3,3,3,3]}
                     candidateScores={location.state.cultureFit.candidateScores}
