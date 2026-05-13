@@ -297,8 +297,13 @@ export default function Dashboard() {
         source: videoSource,
         videoList: videoList,
         index: index,
-        cultureFit: (activeTab === 'advanceSearch' && selectedCultureRole && videoCultureFits[video.id])
-          ? videoCultureFits[video.id]
+        cultureFit: (activeTab === 'advanceSearch' && selectedCultureRole)
+          ? (videoCultureFits[video.id] ?? {
+              score: null,
+              targets: [3, 3, 3, 3, 3],
+              candidateScores: null,
+              roleName: CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.name || '',
+            })
           : null,
       }
     });
@@ -686,13 +691,15 @@ export default function Dashboard() {
 
     const compute = async () => {
       try {
-        const [profileResult, scoresResult] = await Promise.allSettled([
+        const [profileResult, scoresResult, candidatesResult] = await Promise.allSettled([
           CULTURE_PROFILE_API.getProfile(),
           apiClient.get('/scores'),
+          apiClient.get('/candidates'),
         ]);
 
         const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
         const scoresData = scoresResult.status === 'fulfilled' ? (scoresResult.value.data || []) : [];
+        const candidatesData = candidatesResult.status === 'fulfilled' ? (candidatesResult.value.data || []) : [];
 
         const baseTargets = (profile?.targets || [3, 3, 3, 3, 3]).map(Number);
         const roleOffset = CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.offset || [0, 0, 0, 0, 0];
@@ -715,10 +722,28 @@ export default function Dashboard() {
           if (s.id != null) scoreMap[s.id] = scores;
         });
 
+        // Formula-based fallback: compute scores from video analysis inputValues
+        const steadyRate = (val) => 1 - Math.abs(val - 0.5) * 2;
+        const formulaMap = {};
+        candidatesData.forEach(c => {
+          const v = c.inputValues;
+          if (!v) return;
+          const scaled = [
+            0.20*v.emotion + 0.20*v.smile + 0.10*v.eyeContact + 0.25*v.tone + 0.25*v.pitch,
+            0.25*v.emotion + 0.25*v.smile + 0.20*v.tone + 0.20*steadyRate(v.speechRate) + 0.10*v.eyeContact,
+            0.25*v.emotion + 0.25*v.energy + 0.25*v.speechRate + 0.25*v.straightFace,
+            0.30*v.energy + 0.30*v.pitch + 0.30*v.speechRate + 0.10*v.emotion,
+            0.25*v.tone + 0.25*v.pitch + 0.15*v.straightFace + 0.15*v.eyeContact + 0.15*v.fillerWords + 0.05*v.energy,
+          ].map(s => Math.max(1, Math.min(5, 1 + s * 4)));
+          if (c.id != null) formulaMap[c.id] = scaled;
+          if (c.userId != null) formulaMap[c.userId] = scaled;
+        });
+
         const fits = {};
         advanceSearchVideos.forEach(video => {
           const candidateScores =
-            scoreMap[video.userId] ?? scoreMap[video.id] ?? scoreMap[video.candidateId] ?? null;
+            scoreMap[video.userId] ?? scoreMap[video.id] ?? scoreMap[video.candidateId] ??
+            formulaMap[video.userId] ?? formulaMap[video.id] ?? null;
           if (candidateScores && targetArea > 0) {
             const overlapRadii = candidateScores.map((s, i) => Math.min(s, adjustedTargets[i]));
             const overlapArea = calcPolygonArea(overlapRadii);
