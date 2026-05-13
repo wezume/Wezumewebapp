@@ -39,6 +39,24 @@ import VideoSkeleton from "../components/videos/VideoSkeleton";
 import apiClient from '../axios/axios';
 import { Mic, UploadFile, Search as SearchIcon, Hub as HubIcon } from "@mui/icons-material";
 import { TextField } from "@mui/material";
+import CULTURE_PROFILE_API from '../services/cultureProfileApi.js';
+
+const CULTURE_ROLES = [
+  { id: 'hr', name: 'HR', offset: [2, 1, 2, 0, 1] },
+  { id: 'ops_finance', name: 'Ops / Finance', offset: [0, 0, 2, 0, 2] },
+  { id: 'sales_marketing', name: 'Sales / Marketing', offset: [0, 1, 0, 2, 1] },
+  { id: 'customer_support', name: 'Customer Support', offset: [1, 2, 1, 0, 1] },
+  { id: 'rnd', name: 'R&D', offset: [0, 0, 1, 2, 2] },
+];
+
+const calcPolygonArea = (radii) => {
+  const angle = (2 * Math.PI) / radii.length;
+  let area = 0;
+  for (let i = 0; i < radii.length; i++) {
+    area += 0.5 * radii[i] * radii[(i + 1) % radii.length] * Math.sin(angle);
+  }
+  return area;
+};
 
 const AnimatedCounter = ({ end, duration = 2000, suffix = "" }) => {
   const [count, setCount] = useState(0);
@@ -187,6 +205,10 @@ export default function Dashboard() {
   const [advanceSearchVideos, setAdvanceSearchVideos] = useState([]);
   const [isAdvanceSearchLoading, setIsAdvanceSearchLoading] = useState(false);
 
+  // Culture Fit state (Advanced Search)
+  const [selectedCultureRole, setSelectedCultureRole] = useState(null);
+  const [videoCultureFits, setVideoCultureFits] = useState({});
+
   // Refs for recording
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -274,7 +296,10 @@ export default function Dashboard() {
         from: '/app/dashboard',
         source: videoSource,
         videoList: videoList,
-        index: index
+        index: index,
+        cultureFit: (activeTab === 'advanceSearch' && selectedCultureRole && videoCultureFits[video.id])
+          ? videoCultureFits[video.id]
+          : null,
       }
     });
   };
@@ -648,6 +673,68 @@ export default function Dashboard() {
     if (jdInputRef.current) jdInputRef.current.value = '';
   };
 
+  // Compute culture fit scores whenever role or results change
+  useEffect(() => {
+    if (!selectedCultureRole || advanceSearchVideos.length === 0) {
+      setVideoCultureFits({});
+      return;
+    }
+
+    const initial = {};
+    advanceSearchVideos.forEach(v => { initial[v.id] = null; });
+    setVideoCultureFits(initial);
+
+    const compute = async () => {
+      try {
+        const [profile, scoresRes] = await Promise.all([
+          CULTURE_PROFILE_API.getProfile(),
+          apiClient.get('/scores'),
+        ]);
+
+        const baseTargets = (profile?.targets || [3, 3, 3, 3, 3]).map(Number);
+        const roleOffset = CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.offset || [0, 0, 0, 0, 0];
+        const adjustedTargets = baseTargets.map((t, i) => Math.max(1, Math.min(5, t + roleOffset[i])));
+        const targetArea = calcPolygonArea(adjustedTargets);
+
+        const scoreMap = {};
+        (scoresRes.data || []).forEach(s => {
+          scoreMap[s.candidateId] = [
+            s.normalizedTeamworkScore / 2,
+            s.normalizedCommunicationScore / 2,
+            s.normalizedValuesAlignmentScore / 2,
+            s.normalizedAdaptabilityScore / 2,
+            s.normalizedOverallScore / 2,
+          ];
+        });
+
+        const fits = {};
+        advanceSearchVideos.forEach(video => {
+          const candidateScores = scoreMap[video.userId];
+          if (candidateScores && targetArea > 0) {
+            const overlapRadii = candidateScores.map((s, i) => Math.min(s, adjustedTargets[i]));
+            const overlapArea = calcPolygonArea(overlapRadii);
+            const score = Math.min(100, Math.max(0, (overlapArea / targetArea) * 100));
+            fits[video.id] = {
+              score,
+              targets: adjustedTargets,
+              candidateScores,
+              roleName: CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.name || '',
+            };
+          } else {
+            fits[video.id] = { score: null, targets: adjustedTargets, candidateScores: null,
+              roleName: CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.name || '' };
+          }
+        });
+
+        setVideoCultureFits(fits);
+      } catch (err) {
+        console.error('Culture fit computation failed:', err);
+      }
+    };
+
+    compute();
+  }, [selectedCultureRole, advanceSearchVideos]);
+
   // --- Advance Search Execution ---
   const handleAdvanceSearch = async () => {
     if (!transcriptionKeywords.trim()) {
@@ -657,6 +744,8 @@ export default function Dashboard() {
 
     setIsAdvanceSearchLoading(true);
     setAdvanceSearchVideos([]);
+    setSelectedCultureRole(null);
+    setVideoCultureFits({});
 
     try {
       const params = new URLSearchParams();
@@ -1781,6 +1870,29 @@ export default function Dashboard() {
               </Box>
             )}
 
+            {/* Culture Fit dropdown — shown only after search results are available */}
+            {activeTab === "advanceSearch" && advanceSearchVideos.length > 0 && (
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5, flexWrap: "wrap", gap: 2 }}>
+                <Typography variant="body2" sx={{ color: "#64748b", fontWeight: 600 }}>
+                  {advanceSearchVideos.length} matching profile{advanceSearchVideos.length !== 1 ? "s" : ""} found
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Culture Fit Role</InputLabel>
+                  <Select
+                    value={selectedCultureRole || ""}
+                    onChange={(e) => setSelectedCultureRole(e.target.value || null)}
+                    label="Culture Fit Role"
+                    sx={{ borderRadius: 2, bgcolor: "white" }}
+                  >
+                    <MenuItem value="">N/A — no culture filter</MenuItem>
+                    {CULTURE_ROLES.map(role => (
+                      <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
+
             {isCurrentTabLoading() ? (
               <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 4 }}>
                 <CircularProgress />
@@ -1829,6 +1941,11 @@ export default function Dashboard() {
                           <VideoCard
                             video={video}
                             isSearchResult={activeTab === "advanceSearch"}
+                            cultureFitScore={
+                              activeTab === "advanceSearch" && selectedCultureRole !== null
+                                ? (videoCultureFits[video.id]?.score ?? null)
+                                : undefined
+                            }
                             onClick={() => handleVideoClick(video)}
                           />
                         </Grid>

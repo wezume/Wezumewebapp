@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, Target, ChevronDown, ChevronRight, Edit3, CheckCircle2, ArrowRight, ArrowLeft, User, X, Search, Users, Star, Award, Info } from 'lucide-react';
+import { useAppStore } from '../store/appStore';
+import { Briefcase, Target, ChevronDown, Edit3, CheckCircle2, ArrowRight, ArrowLeft, User, X, Info } from 'lucide-react';
+import CultureFitRadar from '../components/culture/CultureFitRadar';
 
 const CultureFitScorer = () => {
   const navigate = useNavigate();
+  const { userDetails } = useAppStore();
   // Industry Data
   const industryProfiles = {
     it_ites: { name: 'IT/ITES', target: [4, 4, 4, 5, 4], fit: 'Technical excellence, agile delivery, performance-focused.' },
@@ -47,6 +50,37 @@ const CultureFitScorer = () => {
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [showRolePopup, setShowRolePopup] = useState(false);
   const [selectedRoleDetails, setSelectedRoleDetails] = useState(null);
+  const [showNoIndustryModal, setShowNoIndustryModal] = useState(false);
+
+  // Map profile industry string → industryProfiles key
+  const mapProfileIndustry = (industry) => {
+    if (!industry) return null;
+    const s = industry.toLowerCase();
+    if (s.includes('information technology') || s.includes('it/') || s.includes('it ')) return 'it_ites';
+    if (s.includes('media') || s.includes('entertainment')) return 'media_ent';
+    if (s.includes('hospitality')) return 'hospitality';
+    if (s.includes('transport') || s.includes('aviation')) return 'transport_aviation';
+    if (s.includes('real estate') || s.includes('construction') || s.includes('infrastructure')) return 'realestate_inf_const';
+    if (s.includes('consumer') || s.includes('retail') || s.includes('e-commerce') || s.includes('ecommerce')) return 'consumer_retail';
+    if (s.includes('manufacturing') || s.includes('logistics')) return 'manufacturing_logistics';
+    if (s.includes('energy') || s.includes('utilities')) return 'energy_utilities';
+    if (s.includes('healthcare') || s.includes('life science') || s.includes('pharma') || s.includes('biotech')) return 'healthcare_lifesciences';
+    if (s.includes('professional') || s.includes('consulting')) return 'professional_services';
+    if (s.includes('startup')) return 'startups';
+    if (s.includes('education') || s.includes('edtech')) return 'education_edtech';
+    if (s.includes('banking') || s.includes('finance') || s.includes('insurance') || s.includes('bfsi')) return 'bfsi';
+    return 'others';
+  };
+
+  // Auto-fill industry from recruiter profile
+  useEffect(() => {
+    if (userDetails?.industry) {
+      const key = mapProfileIndustry(userDetails.industry);
+      setSelectedIndustry(key || 'others');
+    } else {
+      setShowNoIndustryModal(true);
+    }
+  }, [userDetails]);
 
   const functionalRoles = [
     { id: 'hr', name: 'HR' },
@@ -230,117 +264,7 @@ const CultureFitScorer = () => {
     [selectedCandidateId, processedCandidates]);
 
   // -- Soft Curved Radar Chart Implementation --
-  const RadarChartCustom = ({ targetScores, candidateScores, labels }) => {
-    const size = 300;
-    const center = size / 2;
-    const radius = 100;
-    const maxScore = 5;
-
-    const getPoint = (score, index, total) => {
-      const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
-      const r = (score / maxScore) * radius;
-      return { x: center + r * Math.cos(angle), y: center + r * Math.sin(angle) };
-    };
-
-    const getCurvedPath = (scores) => {
-      if (!scores || scores.length === 0) return '';
-      const points = scores.map((s, i) => getPoint(s, i, scores.length));
-      let d = `M ${points[0].x} ${points[0].y}`;
-      for (let i = 0; i < points.length; i++) {
-        const p0 = points[i === 0 ? points.length - 1 : i - 1];
-        const p1 = points[i];
-        const p2 = points[(i + 1) % points.length];
-        const p3 = points[(i + 2) % points.length];
-
-        const cp1x = p1.x + (p2.x - p0.x) / 6;
-        const cp1y = p1.y + (p2.y - p0.y) / 6;
-        const cp2x = p2.x - (p3.x - p1.x) / 6;
-        const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-        d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-      }
-      return d + " Z";
-    };
-
-    const targetPath = getCurvedPath(targetScores);
-    const candidatePath = candidateScores ? getCurvedPath(candidateScores) : '';
-
-    return (
-      <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
-        {/* Gradient Definitions */}
-        <defs>
-          {/* Blue gradient for target curve */}
-          <radialGradient id="targetGradient" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="rgba(59, 130, 246, 0.5)" />
-            <stop offset="50%" stopColor="rgba(59, 130, 246, 0.5)" />
-            <stop offset="100%" stopColor="rgba(59, 130, 246, 0.5)" />
-          </radialGradient>
-
-          {/* Red gradient for candidate curve */}
-          <radialGradient id="candidateGradient" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="rgba(239, 68, 68, 0.5)" />
-            <stop offset="50%" stopColor="rgba(239, 68, 68, 0.5)" />
-            <stop offset="100%" stopColor="rgba(239, 68, 68, 0.5)" />
-          </radialGradient>
-
-          {/* Blue gradient for solo target curve */}
-          <radialGradient id="indigoGradient" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="rgba(59, 130, 246, 0.5)" />
-            <stop offset="50%" stopColor="rgba(59, 130, 246, 0.5)" />
-            <stop offset="100%" stopColor="rgba(59, 130, 246, 0.5)" />
-          </radialGradient>
-        </defs>
-
-        {/* Grid */}
-        {[1, 2, 3, 4, 5].map(level => (
-          <circle key={level} cx={center} cy={center} r={(level / maxScore) * radius} fill="none" stroke="#e2e8f0" strokeWidth="1" />
-        ))}
-        {labels.map((_, i) => {
-          const p = getPoint(5, i, labels.length);
-          return <line key={i} x1={center} y1={center} x2={p.x} y2={p.y} stroke="#e2e8f0" />;
-        })}
-        {labels.map((label, i) => {
-          const p = getPoint(6.2, i, labels.length);
-          return (
-            <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" className="text-[10px] font-bold fill-slate-500 uppercase">
-              {label}
-            </text>
-          );
-        })}
-
-        {/* Target Profile - Blue gradient with dashed stroke if candidate selected, else Blue gradient with solid stroke */}
-        <path
-          d={targetPath}
-          fill={candidateScores ? "url(#targetGradient)" : "url(#indigoGradient)"}
-          strokeWidth="2"
-          stroke={candidateScores ? "#3b82f6" : "#3b82f6"}
-          strokeDasharray={candidateScores ? "4 4" : "0"}
-          className="transition-all duration-500"
-        />
-
-        {/* Candidate Profile - Red gradient with solid stroke */}
-        {candidateScores && (
-          <path
-            d={candidatePath}
-            fill="url(#candidateGradient)"
-            stroke="#ef4444"
-            strokeWidth="3"
-            className="animate-in fade-in duration-500"
-          />
-        )}
-
-        {/* Dots */}
-        {targetScores.map((score, i) => {
-          const p = getPoint(score, i, labels.length);
-          return <circle key={`t-${i}`} cx={p.x} cy={p.y} r={3} fill={candidateScores ? "#3b82f6" : "#3b82f6"} stroke="white" strokeWidth="1.5" />
-        })}
-        {candidateScores && candidateScores.map((score, i) => {
-          const p = getPoint(score, i, labels.length);
-          return <circle key={`c-${i}`} cx={p.x} cy={p.y} r={4} fill="#ef4444" stroke="white" strokeWidth="2" />
-        })}
-      </svg>
-    );
-  };
+  const RadarChartCustom = CultureFitRadar;
 
   return (
     <div className="min-h-screen w-full bg-[#fcfdfe] text-slate-800 font-sans flex flex-col selection:bg-indigo-100 selection:text-indigo-900">
@@ -362,132 +286,52 @@ const CultureFitScorer = () => {
         </div>
       </header>
 
-      <main className={`flex-1 ${!selectedIndustry ? 'max-w-7xl' : 'max-w-full lg:px-12'} mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col gap-6 sm:gap-8`}>
+      <main className="flex-1 max-w-full lg:px-12 mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col gap-6 sm:gap-8">
 
-        {/* Phase 1: Selector */}
-        {!selectedIndustry && (
-          <div className="flex-1 flex flex-col justify-center items-center py-12">
-            <div className="text-center mb-12 max-w-2xl px-4 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-              <div className="inline-block p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-6 shadow-sm border border-indigo-100">
-                <Target size={32} />
-              </div>
-              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-6 tracking-tight leading-[1.1]">Define Your <span className="text-indigo-600">Cultural Fit</span></h2>
-              <p className="text-slate-500 text-lg sm:text-xl font-medium leading-relaxed">Select an industry to establish your baseline culture fit requirements and refine by functional area.</p>
+        {/* Main Workspace — industry auto-filled from profile */}
+        <div className="flex flex-col gap-6 lg:gap-8">
+
+          {/* Industry label + Role filter */}
+          <div className="flex items-center justify-between px-2 flex-wrap gap-4">
+            <div className="flex items-center gap-2 text-sm text-slate-500 font-semibold">
+              <Target size={16} className="text-indigo-500" />
+              <span>{selectedIndustry ? industryProfiles[selectedIndustry].name : (userDetails?.industry || 'Industry not set')}</span>
+              <button onClick={() => navigate('/app/profile')} className="ml-1 text-indigo-500 hover:underline text-xs">(change in Profile)</button>
             </div>
-
-            <div className="relative w-full max-w-2xl mx-auto transition-all duration-700 mt-10">
-              <div className="relative">
-                <button
-                  onClick={() => setIsIndustryDropdownOpen(!isIndustryDropdownOpen)}
-                  className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl text-base font-bold text-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-300 hover:shadow-md transition-all focus:ring-4 focus:ring-indigo-500/10"
-                >
-                  <div className="flex items-center gap-3">
-                    <Search size={18} className="text-slate-400" />
-                    <span>{selectedIndustry ? industryProfiles[selectedIndustry].name : 'Search Sectors...'}</span>
+            <div className="relative w-64">
+              <button
+                onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                className="w-full px-5 py-3.5 bg-white border border-slate-200 rounded-2xl text-[13px] font-bold text-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-300 hover:shadow-md transition-all focus:ring-4 focus:ring-indigo-500/10"
+              >
+                <div className="flex items-center gap-3">
+                  <Briefcase size={18} className="text-slate-400" />
+                  <span>{selectedRole ? functionalRoles.find(r => r.id === selectedRole)?.name : 'Role: None'}</span>
+                </div>
+                <ChevronDown size={18} className={`text-slate-400 transition-transform ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isRoleDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="overflow-y-auto max-h-[300px] custom-scrollbar py-2">
+                    <button onClick={() => { setSelectedRole(null); setIsRoleDropdownOpen(false); }}
+                      className={`w-full text-left px-5 py-3 text-sm font-bold transition-colors ${!selectedRole ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >None</button>
+                    {functionalRoles.map(role => (
+                      <button key={role.id}
+                        onClick={() => { setSelectedRole(role.id); setIsRoleDropdownOpen(false); }}
+                        className={`w-full text-left px-5 py-3 text-sm font-bold transition-colors ${selectedRole === role.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >{role.name}</button>
+                    ))}
                   </div>
-                  <ChevronDown size={18} className={`text-slate-400 transition-transform ${isIndustryDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isIndustryDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-h-[300px] flex flex-col">
-                    <div className="p-3 border-b border-slate-50">
-                      <input
-                        type="text"
-                        placeholder="Type to filter..."
-                        value={industrySearchQuery}
-                        onChange={(e) => setIndustrySearchQuery(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="overflow-y-auto flex-1 custom-scrollbar pb-2">
-                      {Object.entries(industryProfiles)
-                        .filter(([_, val]) => val.name.toLowerCase().includes(industrySearchQuery.toLowerCase()))
-                        .map(([key, val]) => (
-                          <button
-                            key={key}
-                            onClick={() => {
-                              setSelectedIndustry(key);
-                              setIsIndustryDropdownOpen(false);
-                              setIndustrySearchQuery('');
-                            }}
-                            className={`w-full text-left px-5 py-3 text-sm font-bold transition-colors ${selectedIndustry === key ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            {val.name}
-                          </button>
-                        ))}
-                      {Object.entries(industryProfiles).filter(([_, val]) => val.name.toLowerCase().includes(industrySearchQuery.toLowerCase())).length === 0 && (
-                        <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No matching sectors</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Phase 2: Main Workspace */}
-        {selectedIndustry && (
-          <div className="flex flex-col gap-6 lg:gap-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 items-center mb-4 px-2 gap-4">
-              <div className="flex items-center justify-start">
-                <button
-                  onClick={() => setSelectedIndustry('')}
-                  className="flex items-center gap-2 text-slate-400 hover:text-indigo-600 font-bold transition-colors text-sm"
-                >
-                  <ArrowRight size={16} className="rotate-180" /> Change Sector: {industryProfiles[selectedIndustry].name}
-                </button>
-              </div>
-              <div className="flex justify-center">
-                <div className="relative w-80">
-                  <button
-                    onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                    className="w-full px-5 py-3.5 bg-white border border-slate-200 rounded-2xl text-[13px] font-bold text-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-300 hover:shadow-md transition-all focus:ring-4 focus:ring-indigo-500/10"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Briefcase size={18} className="text-slate-400" />
-                      <span>{selectedRole ? functionalRoles.find(r => r.id === selectedRole)?.name : 'Role: None'}</span>
-                    </div>
-                    <ChevronDown size={18} className={`text-slate-400 transition-transform ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
+          {/* 2-column grid: Sliders + Radar chart */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
 
-                  {isRoleDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="overflow-y-auto max-h-[300px] custom-scrollbar py-2">
-                        <button
-                          onClick={() => {
-                            setSelectedRole(null);
-                            setIsRoleDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-5 py-3 text-sm font-bold transition-colors ${!selectedRole ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          None
-                        </button>
-                        {functionalRoles.map(role => (
-                          <button
-                            key={role.id}
-                            onClick={() => {
-                              setSelectedRole(role.id);
-                              setIsRoleDropdownOpen(false);
-                            }}
-                            className={`w-full text-left px-5 py-3 text-sm font-bold transition-colors ${selectedRole === role.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            {role.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="hidden md:block"></div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-
-              {/* LEFT: Target Editor */}
-              <div className="lg:col-span-4 order-2 lg:order-1">
+            {/* LEFT: Target Editor */}
+            <div className="order-2 lg:order-1">
                 <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-6 sm:p-7 sticky top-24">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-base font-black text-slate-900 flex items-center gap-3">
@@ -564,7 +408,7 @@ const CultureFitScorer = () => {
               </div>
 
               {/* MIDDLE: Visualization */}
-              <div className="lg:col-span-4 order-1 lg:order-2">
+              <div className="order-1 lg:order-2">
                 <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-200/60 border border-slate-100 p-6 sm:p-8 flex flex-col items-center relative overflow-hidden h-full min-h-[500px]">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-blue-500 to-indigo-500 opacity-50"></div>
                   <div className="absolute inset-x-0 -top-24 h-64 bg-indigo-50/30 blur-[100px] rounded-full"></div>
@@ -572,7 +416,7 @@ const CultureFitScorer = () => {
                   <div className="relative z-10 w-full flex flex-col sm:flex-row justify-between items-start gap-4 mb-10">
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-2xl tracking-tight leading-tight">
-                        {selectedCandidate ? selectedCandidate.name : (customSectorName || industryProfiles[selectedIndustry].name)}
+                        {selectedCandidate ? selectedCandidate.name : (customSectorName || (selectedIndustry && industryProfiles[selectedIndustry]?.name) || userDetails?.industry || 'Loading…')}
                       </h3>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mt-1.5 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
@@ -618,120 +462,8 @@ const CultureFitScorer = () => {
                 </div>
               </div>
 
-              {/* RIGHT: Candidate List */}
-              <div className="lg:col-span-4 order-3">
-                <div className="flex flex-col gap-6 lg:sticky lg:top-24">
-                  {/* Search and Stats */}
-                  <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-5 sm:p-6">
-                    <div className="flex flex-col gap-4">
-                      <div className="flex justify-between items-center px-1">
-                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2.5">
-                          <Users size={18} className="text-indigo-500" />
-                          Pool
-                        </h3>
-                        <div className="flex items-center gap-1.5 bg-slate-900 text-white px-2.5 py-1 rounded-lg text-[10px] font-black tabular-nums">
-                          {processedCandidates.filter(c => c.isAccepted).length} / {processedCandidates.length}
-                        </div>
-                      </div>
-
-                      <div className="relative group">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
-                          <Search size={16} />
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Search Profile..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full pl-11 pr-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-[13px] font-bold text-slate-800 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-slate-400 placeholder:font-medium"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* List */}
-                  <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col max-h-[500px] sm:max-h-[600px]">
-                    <div className="overflow-y-auto p-3 sm:p-4 space-y-2.5 custom-scrollbar">
-                      {filteredCandidates.length === 0 && (
-                        <div className="py-12 text-center text-slate-400 px-6">
-                          <div className="mb-4 inline-block opacity-20"><Search size={40} /></div>
-                          <p className="text-xs font-bold uppercase tracking-widest">No matching profiles</p>
-                        </div>
-                      )}
-                      {filteredCandidates.map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => setSelectedCandidateId(c.id)}
-                          className={`w-full text-left p-4 rounded-2xl transition-all border-2 flex items-center justify-between group active:scale-[0.98] ${selectedCandidateId === c.id
-                            ? 'bg-slate-900 border-slate-900 shadow-2xl shadow-indigo-100'
-                            : 'bg-white border-transparent hover:border-indigo-50 hover:bg-indigo-50/20'
-                            }`}
-                        >
-                          <div className="flex-1 min-w-0 pr-4">
-                            <p className={`text-[13px] font-black tracking-tight truncate transition-colors ${selectedCandidateId === c.id ? 'text-white' : 'text-slate-800 group-hover:text-indigo-600'}`}>
-                              {c.name}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${selectedCandidateId === c.id ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'
-                                }`}>
-                                Ref: {c.id}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className={`w-14 h-11 rounded-xl flex items-center justify-center text-[13px] font-black tabular-nums transition-all border-2 ${c.isAccepted
-                            ? (selectedCandidateId === c.id ? 'bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20' : 'bg-emerald-50 border-emerald-100 text-emerald-600')
-                            : (selectedCandidateId === c.id ? 'bg-rose-500 border-rose-400 text-white shadow-lg shadow-rose-500/20' : 'bg-rose-50 border-rose-100 text-rose-600')
-                            }`}>
-                            {c.fitScore.toFixed(0)}%
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Candidate Analytics Detail (Visible only on selection) */}
-                  {selectedCandidate && (
-                    <div className="animate-in fade-in slide-in-from-top-4 duration-500 lg:hidden">
-                      <div className="bg-slate-900 rounded-3xl p-6 shadow-2xl shadow-slate-300">
-                        <div className="flex justify-between items-center mb-6">
-                          <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.25em]">Detail Diagnostics</h4>
-                          <button onClick={() => setSelectedCandidateId(null)} className="text-slate-500 hover:text-white transition-colors"><X size={16} /></button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div className="space-y-4">
-                            {['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality'].map((trait, i) => (
-                              <div key={trait}>
-                                <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                                  <span>{trait}</span>
-                                  <span className="text-white">{selectedCandidate.culturalScores[i].toFixed(1)}</span>
-                                </div>
-                                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(selectedCandidate.culturalScores[i] / 5) * 100}%` }}></div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex flex-col gap-4">
-                            <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
-                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Emotion Cues</p>
-                              <p className="text-lg font-black text-white">{((selectedCandidate.inputValues.emotion + selectedCandidate.inputValues.smile) / 2 * 100).toFixed(0)}%</p>
-                            </div>
-                            <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
-                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Authenticity</p>
-                              <p className="text-lg font-black text-white">{((selectedCandidate.inputValues.straightFace + selectedCandidate.inputValues.eyeContact) / 2 * 100).toFixed(0)}%</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
             </div>
           </div>
-        )}
 
       </main>
 
@@ -775,6 +507,35 @@ const CultureFitScorer = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Industry Modal */}
+      {showNoIndustryModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-indigo-600 p-8 text-white">
+              <h3 className="text-2xl font-black tracking-tight mb-1">Industry Not Set</h3>
+              <p className="text-indigo-200 text-sm">Update your profile to use Culture Fit</p>
+            </div>
+            <div className="p-8 space-y-4">
+              <p className="text-slate-600 text-sm leading-relaxed">
+                Your recruiter profile doesn't have an industry selected. Please update your profile first so we can load the right culture baseline for your organisation.
+              </p>
+              <button
+                onClick={() => { setShowNoIndustryModal(false); window.location.href = '/profile'; }}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-[13px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+              >
+                Go to Profile
+              </button>
+              <button
+                onClick={() => setShowNoIndustryModal(false)}
+                className="w-full py-2 text-slate-400 text-[12px] font-bold hover:text-slate-600 transition-colors"
+              >
+                Continue with default
+              </button>
             </div>
           </div>
         </div>

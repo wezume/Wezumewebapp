@@ -2,9 +2,10 @@
 import {
     Box, Container, Avatar, Typography, Paper, Grid, Chip, Button, TextField,
     Dialog, DialogTitle, DialogContent, DialogActions, Alert, Skeleton, Fade,
-    Slide, Card, CardContent, Snackbar, FormControl, InputLabel, Select, MenuItem
+    Slide, Card, CardContent, Snackbar, FormControl, InputLabel, Select, MenuItem,
+    Slider
 } from '@mui/material';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import PersonIcon from '@mui/icons-material/Person';
 import EditIcon from '@mui/icons-material/Edit';
@@ -16,6 +17,9 @@ import BusinessIcon from '@mui/icons-material/Business';
 import StarIcon from '@mui/icons-material/Star';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import UploadIcon from '@mui/icons-material/Upload';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import CULTURE_PROFILE_API from '../services/cultureProfileApi.js';
 
 export default function Profile() {
     const { userDetails, isLoadingUserDetails, updateUserDetails, isUpdatingUserDetails } = useAppStore();
@@ -25,7 +29,26 @@ export default function Profile() {
     const [fileData, setFileData] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     const fileInputRef = useRef();
+    const [cultureProfile, setCultureProfile] = useState(null);
+    const [cultureLoading, setCultureLoading] = useState(false);
+    const [cultureSaving, setCultureSaving] = useState(false);
+    const [cultureIndustry, setCultureIndustry] = useState('');
+    const [cultureTargets, setCultureTargets] = useState([3, 3, 3, 3, 3]);
     console.log(userDetails)
+
+    useEffect(() => {
+        const roleCode = userDetails?.roleCode;
+        if (roleCode !== 'employer' && roleCode !== 'investor') return;
+        setCultureLoading(true);
+        CULTURE_PROFILE_API.getProfile()
+            .then(data => {
+                setCultureProfile(data);
+                setCultureIndustry(data.industry || userDetails.industry || '');
+                if (data.targets) setCultureTargets(data.targets.map(t => Math.round(t)));
+            })
+            .catch(err => console.error('Culture profile fetch failed', err))
+            .finally(() => setCultureLoading(false));
+    }, [userDetails]);
     const cityOption = [
         'New Delhi',
         'Mumbai',
@@ -224,6 +247,36 @@ export default function Profile() {
     const handleSnackbarClose = (event, reason) => {
         if (reason === 'clickaway') return;
         setSnackbar(prev => ({ ...prev, open: false }));
+    };
+
+    const handleCultureLock = async () => {
+        setCultureSaving(true);
+        try {
+            const result = await CULTURE_PROFILE_API.saveAndLock(cultureIndustry, cultureTargets);
+            const expiry = new Date(result.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+            setSnackbar({ open: true, message: `Culture profile locked until ${expiry}`, severity: 'success' });
+            const data = await CULTURE_PROFILE_API.getProfile();
+            setCultureProfile(data);
+        } catch (err) {
+            setSnackbar({ open: true, message: err.message || 'Failed to lock culture profile', severity: 'error' });
+        } finally {
+            setCultureSaving(false);
+        }
+    };
+
+    const handleCultureUnlock = async () => {
+        setCultureSaving(true);
+        try {
+            await CULTURE_PROFILE_API.unlock();
+            setSnackbar({ open: true, message: 'Culture profile unlocked', severity: 'success' });
+            const data = await CULTURE_PROFILE_API.getProfile();
+            setCultureProfile(data);
+            if (data.targets) setCultureTargets(data.targets.map(t => Math.round(t)));
+        } catch (err) {
+            setSnackbar({ open: true, message: err.message || 'Failed to unlock culture profile', severity: 'error' });
+        } finally {
+            setCultureSaving(false);
+        }
     };
 
     const textFieldStyle = {
@@ -493,6 +546,121 @@ export default function Profile() {
                             </Grid>
                         ))}
                     </Grid>
+
+                    {isEmployerOrInvestor() && (
+                        <Box sx={{ mt: 4 }}>
+                            <Paper elevation={2} sx={{ p: 4, borderRadius: 3, border: '1px solid #e2e8f0' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        <Box sx={{ bgcolor: '#eff6ff', borderRadius: 2, p: 1, display: 'flex' }}>
+                                            <LockIcon sx={{ color: '#3b82f6' }} />
+                                        </Box>
+                                        <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                                            Company Culture Baseline
+                                        </Typography>
+                                    </Box>
+                                    {cultureProfile?.locked && !cultureProfile?.expired && (
+                                        <Chip
+                                            icon={<LockIcon sx={{ fontSize: '0.9rem !important' }} />}
+                                            label={`Locked · expires ${new Date(cultureProfile.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                                            size="small"
+                                            sx={{ bgcolor: '#dbeafe', color: '#1d4ed8', fontWeight: 600, border: '1px solid #bfdbfe' }}
+                                        />
+                                    )}
+                                    {cultureProfile?.expired && (
+                                        <Chip label="Expired" size="small" color="error" />
+                                    )}
+                                </Box>
+
+                                {cultureProfile?.expired && (
+                                    <Alert severity="warning" sx={{ mb: 3, borderRadius: 2 }}>
+                                        Your culture profile expired on {new Date(cultureProfile.expiresAt).toLocaleDateString()}. Update and re-lock to resume culture fit scoring.
+                                    </Alert>
+                                )}
+
+                                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                                    Set your company&apos;s cultural priorities. These targets drive culture fit % in candidate searches. Lock for 90 days to keep scoring consistent across all searches.
+                                </Typography>
+
+                                {cultureLoading ? (
+                                    <Box>
+                                        {[...Array(6)].map((_, i) => (
+                                            <Skeleton key={i} variant="rectangular" height={28} sx={{ mb: 2, borderRadius: 1 }} />
+                                        ))}
+                                    </Box>
+                                ) : (
+                                    <>
+                                        <FormControl fullWidth sx={{ mb: 4, ...textFieldStyle }}>
+                                            <InputLabel>Industry</InputLabel>
+                                            <Select
+                                                value={cultureIndustry}
+                                                label="Industry"
+                                                disabled={(cultureProfile?.locked && !cultureProfile?.expired) || cultureSaving}
+                                                onChange={(e) => setCultureIndustry(e.target.value)}
+                                            >
+                                                {educationOptions.map(opt => (
+                                                    <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+
+                                        <Grid container spacing={3}>
+                                            {['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality'].map((trait, i) => (
+                                                <Grid size={{ xs: 12, sm: 6 }} key={trait}>
+                                                    <Box sx={{ px: 1 }}>
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>{trait}</Typography>
+                                                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#3b82f6' }}>{cultureTargets[i]} / 5</Typography>
+                                                        </Box>
+                                                        <Slider
+                                                            value={cultureTargets[i]}
+                                                            min={1} max={5} step={1}
+                                                            marks
+                                                            disabled={(cultureProfile?.locked && !cultureProfile?.expired) || cultureSaving}
+                                                            onChange={(_, val) => {
+                                                                const updated = [...cultureTargets];
+                                                                updated[i] = val;
+                                                                setCultureTargets(updated);
+                                                            }}
+                                                            sx={{ color: '#3b82f6' }}
+                                                        />
+                                                    </Box>
+                                                </Grid>
+                                            ))}
+                                        </Grid>
+
+                                        <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+                                            {cultureProfile?.locked && !cultureProfile?.expired ? (
+                                                <Button
+                                                    variant="outlined"
+                                                    color="warning"
+                                                    startIcon={<LockOpenIcon />}
+                                                    disabled={cultureSaving}
+                                                    onClick={handleCultureUnlock}
+                                                >
+                                                    {cultureSaving ? 'Unlocking...' : 'Unlock Profile'}
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="contained"
+                                                    startIcon={<LockIcon />}
+                                                    disabled={cultureSaving || !cultureIndustry}
+                                                    onClick={handleCultureLock}
+                                                    sx={{
+                                                        background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                                        borderRadius: 2,
+                                                        '&:hover': { background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)' }
+                                                    }}
+                                                >
+                                                    {cultureSaving ? 'Saving...' : (cultureProfile?.exists ? 'Update & Lock for 90 Days' : 'Lock for 90 Days')}
+                                                </Button>
+                                            )}
+                                        </Box>
+                                    </>
+                                )}
+                            </Paper>
+                        </Box>
+                    )}
                 </Box>
             </Slide>
 

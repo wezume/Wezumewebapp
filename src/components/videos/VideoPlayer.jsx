@@ -53,6 +53,7 @@ import axiosInstance from "../../axios/axios";
 import { useAppStore } from "../../store/appStore";
 import CommentsSection from "./CommentsSection";
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
+import CultureFitRadar from "../culture/CultureFitRadar";
 
 // --- Icon Styling for improved design and no stretching ---
 const actionIconStyle = {
@@ -1709,6 +1710,31 @@ export default function VideoPlayer() {
               <ArrowBack />
             </IconButton>
             {renderScoreEvaluation()}
+
+            {/* Culture Fit section inside mobile modal */}
+            {location.state?.cultureFit && (
+              <Box sx={{ p: 2, borderTop: "1px solid #f1f5f9" }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  Culture Fit Map — {location.state.cultureFit.roleName}
+                </Typography>
+                {location.state.cultureFit.score !== null ? (
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: "#2563eb", mb: 1 }}>
+                    {location.state.cultureFit.score.toFixed(1)}% fit
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>N/A</Typography>
+                )}
+                {location.state.cultureFit.targets && (
+                  <Box sx={{ width: "100%", aspectRatio: "1/1", maxWidth: 280, mx: "auto" }}>
+                    <CultureFitRadar
+                      targetScores={location.state.cultureFit.targets}
+                      candidateScores={location.state.cultureFit.candidateScores}
+                      labels={['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality']}
+                    />
+                  </Box>
+                )}
+              </Box>
+            )}
           </Paper>
         </Modal>
         <Modal
@@ -2024,6 +2050,75 @@ export default function VideoPlayer() {
 
           {renderScoreEvaluation()}
         </Box>
+
+        {/* Culture Fit Map — shown when navigated from Advanced Search with a role selected */}
+        {location.state?.cultureFit && (
+          <Box
+            sx={{
+              flex: 1,
+              bgcolor: "white",
+              borderRadius: 2,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <Box sx={{ p: 2.5, borderBottom: "1px solid #f1f5f9" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#0f172a", mb: 0.5 }}>
+                Culture Fit Map
+              </Typography>
+              <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Role: {location.state.cultureFit.roleName}
+              </Typography>
+              {location.state.cultureFit.score !== null ? (
+                <Box sx={{ mt: 1, display: "inline-flex", alignItems: "center", gap: 1,
+                  bgcolor: location.state.cultureFit.score >= 70 ? "#dcfce7" : "#dbeafe",
+                  px: 1.5, py: 0.5, borderRadius: 2 }}>
+                  <Typography variant="h6" sx={{
+                    fontWeight: 800,
+                    color: location.state.cultureFit.score >= 70 ? "#16a34a" : "#2563eb",
+                  }}>
+                    {location.state.cultureFit.score.toFixed(1)}%
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>
+                    culture fit
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography variant="body2" sx={{ color: "#94a3b8", mt: 1 }}>No culture score data available</Typography>
+              )}
+            </Box>
+
+            <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", p: 3 }}>
+              {location.state.cultureFit.targets ? (
+                <Box sx={{ width: "100%", maxWidth: 320, aspectRatio: "1/1" }}>
+                  <CultureFitRadar
+                    targetScores={location.state.cultureFit.targets}
+                    candidateScores={location.state.cultureFit.candidateScores}
+                    labels={['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality']}
+                  />
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No target data</Typography>
+              )}
+            </Box>
+
+            {/* Legend */}
+            <Box sx={{ px: 2.5, pb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid #3b82f6", bgcolor: "rgba(59,130,246,0.2)" }} />
+                <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>Target — org culture baseline</Typography>
+              </Box>
+              {location.state.cultureFit.candidateScores && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: "#ef4444" }} />
+                  <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>Candidate — culture signature</Typography>
+                </Box>
+              )}
+            </Box>
+          </Box>
+        )}
 
         <Box sx={{ flex: 1, bgcolor: "white", borderRadius: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
           <CommentsSection videoId={video.id} />

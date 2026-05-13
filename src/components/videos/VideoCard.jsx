@@ -23,7 +23,7 @@ import axiosInstance from "../../axios/axios";
 import { useAppStore } from "../../store/appStore";
 import CountUp from "react-countup";
 
-export default function VideoCard({ video, onClick, isSearchResult }) {
+export default function VideoCard({ video, onClick, isSearchResult, cultureFitScore }) {
   const [hovered, setHovered] = useState(false);
   const [likes, setLikes] = useState(0);
   const [totalScore, setTotalScore] = useState(null);
@@ -136,7 +136,7 @@ export default function VideoCard({ video, onClick, isSearchResult }) {
         sx={{ objectFit: "cover", width: "100%", height: "100%" }}
       />
 
-      {/* ⭐ CONFIDENCE BADGE — SHOWS ONLY IF SEARCH RESULTS + confidence returned */}
+      {/* MATCH % BADGE — top-right, shown for search results */}
       {isSearchResult && video?.confidence !== undefined && (
         <Box
           sx={{
@@ -154,6 +154,32 @@ export default function VideoCard({ video, onClick, isSearchResult }) {
           }}
         >
           {Number(video.confidence).toFixed(1)}%
+        </Box>
+      )}
+
+      {/* CULTURE FIT % BADGE — top-left, shown when role selected */}
+      {isSearchResult && cultureFitScore !== undefined && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            backgroundColor: cultureFitScore !== null
+              ? "rgba(22,163,74,0.85)"
+              : "rgba(100,116,139,0.75)",
+            padding: "4px 8px",
+            borderRadius: "14px",
+            zIndex: 20,
+            color: "white",
+            fontSize: { xs: "0.65rem", md: "0.78rem" },
+            fontWeight: 700,
+            backdropFilter: "blur(6px)",
+            lineHeight: 1.2,
+          }}
+        >
+          {cultureFitScore !== null
+            ? `${Number(cultureFitScore).toFixed(1)}% fit`
+            : "N/A fit"}
         </Box>
       )}
 
