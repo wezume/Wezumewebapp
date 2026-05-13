@@ -36,4 +36,4 @@ jobs:
         run: |
           rsync -az --delete -e "ssh -i ~/.ssh/deploy_key" \
             dist/ \
-            root@89.116.134.110:/home/wezume/htdocs/wezume.com/
+            root@89.116.134.110:/home/wezume-com/htdocs/wezume.com/frontend/
