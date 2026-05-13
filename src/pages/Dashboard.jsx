@@ -197,17 +197,25 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState("name");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
 
-  // Advance Search State
-  const [transcriptionKeywords, setTranscriptionKeywords] = useState("");
+  // Advance Search State — restored from sessionStorage when returning from a video
+  const [transcriptionKeywords, setTranscriptionKeywords] = useState(
+    () => sessionStorage.getItem('dash_keywords') || ""
+  );
   const [isRecording, setIsRecording] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [isUploadingJD, setIsUploadingJD] = useState(false);
-  const [advanceSearchVideos, setAdvanceSearchVideos] = useState([]);
+  const [advanceSearchVideos, setAdvanceSearchVideos] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('dash_searchVideos') || 'null') || []; } catch { return []; }
+  });
   const [isAdvanceSearchLoading, setIsAdvanceSearchLoading] = useState(false);
 
   // Culture Fit state (Advanced Search)
-  const [selectedCultureRole, setSelectedCultureRole] = useState(null);
-  const [videoCultureFits, setVideoCultureFits] = useState({});
+  const [selectedCultureRole, setSelectedCultureRole] = useState(
+    () => sessionStorage.getItem('dash_cultureRole') || null
+  );
+  const [videoCultureFits, setVideoCultureFits] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('dash_cultureFits') || 'null') || {}; } catch { return {}; }
+  });
 
   // Refs for recording
   const mediaRecorderRef = useRef(null);
@@ -225,7 +233,15 @@ export default function Dashboard() {
     return isPlacementOrAcademy ? "job" : "liked";
   };
 
-  const [activeTab, setActiveTab] = useState(getActiveTabFromURL());
+  const [activeTab, setActiveTab] = useState(() => {
+    const urlTab = searchParams.get('tab');
+    if (urlTab && ['liked', 'commented', 'videos', 'advanceSearch'].includes(urlTab)) {
+      return urlTab === 'videos' ? 'job' : urlTab;
+    }
+    const saved = sessionStorage.getItem('dash_activeTab');
+    if (saved && ['liked', 'commented', 'job', 'advanceSearch'].includes(saved)) return saved;
+    return isPlacementOrAcademy ? "job" : "liked";
+  });
 
   const studentData = [
     { id: 1, name: "Arjun Sharma", email: "arjun.sharma@email.com", jobId: "C191" },
@@ -286,6 +302,12 @@ export default function Dashboard() {
       sessionStorage.setItem('videoSource', videoSource);
       sessionStorage.setItem('currentVideosList', JSON.stringify(videoList));
       sessionStorage.setItem('videoListType', videoSource);
+      // Save advance search state so it can be restored on back navigation
+      sessionStorage.setItem('dash_activeTab', activeTab);
+      sessionStorage.setItem('dash_keywords', transcriptionKeywords);
+      sessionStorage.setItem('dash_searchVideos', JSON.stringify(advanceSearchVideos));
+      sessionStorage.setItem('dash_cultureRole', selectedCultureRole || '');
+      sessionStorage.setItem('dash_cultureFits', JSON.stringify(videoCultureFits));
     } catch (error) {
       console.error('Failed to store video navigation info:', error);
     }
