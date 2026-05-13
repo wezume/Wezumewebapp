@@ -686,43 +686,46 @@ export default function Dashboard() {
 
     const compute = async () => {
       try {
-        const [profile, scoresRes] = await Promise.all([
+        const [profileResult, scoresResult] = await Promise.allSettled([
           CULTURE_PROFILE_API.getProfile(),
           apiClient.get('/scores'),
         ]);
+
+        const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+        const scoresData = scoresResult.status === 'fulfilled' ? (scoresResult.value.data || []) : [];
 
         const baseTargets = (profile?.targets || [3, 3, 3, 3, 3]).map(Number);
         const roleOffset = CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.offset || [0, 0, 0, 0, 0];
         const adjustedTargets = baseTargets.map((t, i) => Math.max(1, Math.min(5, t + roleOffset[i])));
         const targetArea = calcPolygonArea(adjustedTargets);
+        const roleName = CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.name || '';
 
+        // Build score map keyed by every available ID field
         const scoreMap = {};
-        (scoresRes.data || []).forEach(s => {
-          scoreMap[s.candidateId] = [
+        scoresData.forEach(s => {
+          const scores = [
             s.normalizedTeamworkScore / 2,
             s.normalizedCommunicationScore / 2,
             s.normalizedValuesAlignmentScore / 2,
             s.normalizedAdaptabilityScore / 2,
             s.normalizedOverallScore / 2,
           ];
+          if (s.candidateId != null) scoreMap[s.candidateId] = scores;
+          if (s.userId != null) scoreMap[s.userId] = scores;
+          if (s.id != null) scoreMap[s.id] = scores;
         });
 
         const fits = {};
         advanceSearchVideos.forEach(video => {
-          const candidateScores = scoreMap[video.userId];
+          const candidateScores =
+            scoreMap[video.userId] ?? scoreMap[video.id] ?? scoreMap[video.candidateId] ?? null;
           if (candidateScores && targetArea > 0) {
             const overlapRadii = candidateScores.map((s, i) => Math.min(s, adjustedTargets[i]));
             const overlapArea = calcPolygonArea(overlapRadii);
             const score = Math.min(100, Math.max(0, (overlapArea / targetArea) * 100));
-            fits[video.id] = {
-              score,
-              targets: adjustedTargets,
-              candidateScores,
-              roleName: CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.name || '',
-            };
+            fits[video.id] = { score, targets: adjustedTargets, candidateScores, roleName };
           } else {
-            fits[video.id] = { score: null, targets: adjustedTargets, candidateScores: null,
-              roleName: CULTURE_ROLES.find(r => r.id === selectedCultureRole)?.name || '' };
+            fits[video.id] = { score: null, targets: adjustedTargets, candidateScores: null, roleName };
           }
         });
 

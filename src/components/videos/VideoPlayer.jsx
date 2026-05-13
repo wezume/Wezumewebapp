@@ -122,6 +122,7 @@ export default function VideoPlayer() {
   });
   // State to control the blur effect
   const [isScoreBlurred, setIsScoreBlurred] = useState(true);
+  const [scorePanelTab, setScorePanelTab] = useState('ai');
   const [scoreState, setScoreState] = useState({
     loading: false, // <-- Changed to false initially
     error: null,
@@ -1729,7 +1730,7 @@ export default function VideoPlayer() {
                     <CultureFitRadar
                       targetScores={location.state.cultureFit.targets}
                       candidateScores={location.state.cultureFit.candidateScores}
-                      labels={['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality']}
+                      labels={['Teamwork', 'Customer', 'Integrity', 'Innovation', 'Excellence']}
                     />
                   </Box>
                 )}
@@ -1978,7 +1979,7 @@ export default function VideoPlayer() {
           </Box>
         </Box>
 
-        {/* This is the Box for the Score Evaluation component */}
+        {/* Score / Culture Fit panel — tabbed when culture fit data is present */}
         <Box
           sx={{
             flex: 1,
@@ -1987,138 +1988,117 @@ export default function VideoPlayer() {
             boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
             position: 'relative',
             overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          {/* This is the Backdrop that creates the blur effect */}
-          <Backdrop
-            sx={{
-              color: '#fff',
-              zIndex: 1,
-              backdropFilter: isScoreBlurred ? 'blur(8px)' : 'none',
-              WebkitBackdropFilter: isScoreBlurred ? 'blur(8px)' : 'none',
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              position: 'absolute',
-              borderRadius: 2,
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              transition: 'backdrop-filter 0.5s ease-in-out, -webkit-backdrop-filter 0.5s ease-in-out',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            open={scoreState.loading || isScoreBlurred}
-          >
-            {scoreState.loading && (
-              <CircularProgress color="inherit" />
-            )}
-
-            {!scoreState.loading && scoreState.data && isScoreBlurred && (
-              <Button
-                variant="contained"
-                sx={{
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '1.1rem',
-                  py: 1.5,
-                  px: 4,
-                  borderRadius: 3,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                  bgcolor: '#1976d2',
-                  '&:hover': {
-                    bgcolor: '#1565c0',
-                  },
-                }}
-                onClick={() => setIsScoreBlurred(false)} // Hides the blur on click
-              >
-                View Score
-              </Button>
-            )}
-
-            {!scoreState.loading && scoreState.error && (
-              <Box sx={{ p: 2, textAlign: 'center' }}>
-                <Error sx={{ color: 'white', fontSize: 48, mb: 1 }} />
-                <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
-                  {scoreState.error.message}
-                </Typography>
-              </Box>
-            )}
-
-          </Backdrop>
-
-          {renderScoreEvaluation()}
-        </Box>
-
-        {/* Culture Fit Map — shown when navigated from Advanced Search with a role selected */}
-        {location.state?.cultureFit && (
-          <Box
-            sx={{
-              flex: 1,
-              bgcolor: "white",
-              borderRadius: 2,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            <Box sx={{ p: 2.5, borderBottom: "1px solid #f1f5f9" }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#0f172a", mb: 0.5 }}>
-                Culture Fit Map
-              </Typography>
-              <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Role: {location.state.cultureFit.roleName}
-              </Typography>
-              {location.state.cultureFit.score !== null ? (
-                <Box sx={{ mt: 1, display: "inline-flex", alignItems: "center", gap: 1,
-                  bgcolor: location.state.cultureFit.score >= 70 ? "#dcfce7" : "#dbeafe",
-                  px: 1.5, py: 0.5, borderRadius: 2 }}>
-                  <Typography variant="h6" sx={{
-                    fontWeight: 800,
-                    color: location.state.cultureFit.score >= 70 ? "#16a34a" : "#2563eb",
-                  }}>
-                    {location.state.cultureFit.score.toFixed(1)}%
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>
-                    culture fit
-                  </Typography>
+          {/* Tab bar — only shown when culture fit data is available */}
+          {location.state?.cultureFit && (
+            <Box sx={{ display: "flex", borderBottom: "1px solid #e2e8f0" }}>
+              {[{ key: 'ai', label: 'AI Score' }, { key: 'culture', label: 'Culture Fit' }].map(tab => (
+                <Box
+                  key={tab.key}
+                  onClick={() => setScorePanelTab(tab.key)}
+                  sx={{
+                    flex: 1, py: 1.2, textAlign: "center", cursor: "pointer", fontWeight: 700,
+                    fontSize: "0.85rem",
+                    color: scorePanelTab === tab.key ? "#2563eb" : "#64748b",
+                    borderBottom: scorePanelTab === tab.key ? "2px solid #2563eb" : "2px solid transparent",
+                    transition: "all 0.2s",
+                    "&:hover": { color: "#2563eb", bgcolor: "#f8fafc" },
+                  }}
+                >
+                  {tab.label}
                 </Box>
-              ) : (
-                <Typography variant="body2" sx={{ color: "#94a3b8", mt: 1 }}>No culture score data available</Typography>
-              )}
+              ))}
             </Box>
+          )}
 
-            <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", p: 3 }}>
-              {location.state.cultureFit.targets ? (
-                <Box sx={{ width: "100%", maxWidth: 320, aspectRatio: "1/1" }}>
+          {/* AI Score tab content */}
+          {scorePanelTab === 'ai' && (
+            <>
+              <Backdrop
+                sx={{
+                  color: '#fff',
+                  zIndex: 1,
+                  backdropFilter: isScoreBlurred ? 'blur(8px)' : 'none',
+                  WebkitBackdropFilter: isScoreBlurred ? 'blur(8px)' : 'none',
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  position: 'absolute',
+                  borderRadius: 2,
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  transition: 'backdrop-filter 0.5s ease-in-out, -webkit-backdrop-filter 0.5s ease-in-out',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                }}
+                open={scoreState.loading || isScoreBlurred}
+              >
+                {scoreState.loading && <CircularProgress color="inherit" />}
+                {!scoreState.loading && scoreState.data && isScoreBlurred && (
+                  <Button
+                    variant="contained"
+                    sx={{ color: 'white', fontWeight: 'bold', fontSize: '1.1rem', py: 1.5, px: 4, borderRadius: 3,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)', bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+                    onClick={() => setIsScoreBlurred(false)}
+                  >
+                    View Score
+                  </Button>
+                )}
+                {!scoreState.loading && scoreState.error && (
+                  <Box sx={{ p: 2, textAlign: 'center' }}>
+                    <Error sx={{ color: 'white', fontSize: 48, mb: 1 }} />
+                    <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>{scoreState.error.message}</Typography>
+                  </Box>
+                )}
+              </Backdrop>
+              {renderScoreEvaluation()}
+            </>
+          )}
+
+          {/* Culture Fit tab content */}
+          {scorePanelTab === 'culture' && location.state?.cultureFit && (
+            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "auto" }}>
+              <Box sx={{ p: 2.5, borderBottom: "1px solid #f1f5f9" }}>
+                <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Role: {location.state.cultureFit.roleName}
+                </Typography>
+                {location.state.cultureFit.score !== null ? (
+                  <Box sx={{ mt: 1, display: "inline-flex", alignItems: "center", gap: 1,
+                    bgcolor: location.state.cultureFit.score >= 70 ? "#dcfce7" : "#dbeafe",
+                    px: 1.5, py: 0.5, borderRadius: 2 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 800,
+                      color: location.state.cultureFit.score >= 70 ? "#16a34a" : "#2563eb" }}>
+                      {location.state.cultureFit.score.toFixed(1)}%
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>culture fit</Typography>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" sx={{ color: "#94a3b8", mt: 1 }}>No culture score data</Typography>
+                )}
+              </Box>
+              <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", p: 2 }}>
+                <Box sx={{ width: "100%", maxWidth: 340, aspectRatio: "1/1" }}>
                   <CultureFitRadar
-                    targetScores={location.state.cultureFit.targets}
+                    targetScores={location.state.cultureFit.targets || [3,3,3,3,3]}
                     candidateScores={location.state.cultureFit.candidateScores}
-                    labels={['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality']}
+                    labels={['Teamwork', 'Customer', 'Integrity', 'Innovation', 'Excellence']}
                   />
                 </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">No target data</Typography>
-              )}
-            </Box>
-
-            {/* Legend */}
-            <Box sx={{ px: 2.5, pb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Box sx={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid #3b82f6", bgcolor: "rgba(59,130,246,0.2)" }} />
-                <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>Target — org culture baseline</Typography>
               </Box>
-              {location.state.cultureFit.candidateScores && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: "#ef4444" }} />
-                  <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>Candidate — culture signature</Typography>
+              <Box sx={{ px: 2.5, pb: 2, display: "flex", gap: 2 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid #3b82f6", bgcolor: "rgba(59,130,246,0.2)" }} />
+                  <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>Org target</Typography>
                 </Box>
-              )}
+                {location.state.cultureFit.candidateScores && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: "#ef4444" }} />
+                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>Candidate</Typography>
+                  </Box>
+                )}
+              </Box>
             </Box>
-          </Box>
-        )}
+          )}
+        </Box>
 
         <Box sx={{ flex: 1, bgcolor: "white", borderRadius: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
           <CommentsSection videoId={video.id} />

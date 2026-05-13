@@ -372,7 +372,7 @@ const CultureFitScorer = () => {
                   )}
 
                   <div className="space-y-6">
-                    {['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality'].map((trait, index) => (
+                    {['Teamwork', 'Customer', 'Integrity', 'Innovation', 'Excellence'].map((trait, index) => (
                       <div key={trait} className="group">
                         <div className="flex justify-between items-center mb-2.5">
                           <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest group-hover:text-indigo-600 transition-colors">{trait}</span>
@@ -438,7 +438,7 @@ const CultureFitScorer = () => {
                     <RadarChartCustom
                       targetScores={currentTargets}
                       candidateScores={selectedCandidate ? selectedCandidate.culturalScores : null}
-                      labels={['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality']}
+                      labels={['Teamwork', 'Customer', 'Integrity', 'Innovation', 'Excellence']}
                     />
                   </div>
 
@@ -486,7 +486,7 @@ const CultureFitScorer = () => {
                 <div>
                   <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Trait Adjustments (vs Industry Baseline)</h4>
                   <div className="space-y-3">
-                    {['Teamwork', 'Excellence', 'Integrity', 'Innovation', 'Quality'].map((trait, i) => (
+                    {['Teamwork', 'Customer', 'Integrity', 'Innovation', 'Excellence'].map((trait, i) => (
                       <div key={trait} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                         <span className="text-xs font-bold text-slate-700">{trait}</span>
                         <div className="flex items-center gap-2">
