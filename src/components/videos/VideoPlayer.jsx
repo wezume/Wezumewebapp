@@ -787,9 +787,7 @@ export default function VideoPlayer() {
     setSnackbar({ open: true, message, severity });
   };
   const handleBackNavigation = () => {
-    if (location.state?.from) {
-      navigate(location.state.from);
-    } else if (window.history.length > 1) {
+    if (window.history.length > 1) {
       navigate(-1);
     } else {
       navigate('/app/videos');
