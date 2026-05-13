@@ -1720,7 +1720,7 @@ export default function VideoPlayer() {
                 </Typography>
                 {location.state.cultureFit.score !== null ? (
                   <Typography variant="h6" sx={{ fontWeight: 800, color: "#2563eb", mb: 1 }}>
-                    {location.state.cultureFit.score.toFixed(1)}% fit
+                    {Math.round(location.state.cultureFit.score)}% fit
                   </Typography>
                 ) : (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>N/A</Typography>
@@ -2067,7 +2067,7 @@ export default function VideoPlayer() {
                     px: 1.5, py: 0.5, borderRadius: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 800,
                       color: location.state.cultureFit.score >= 70 ? "#16a34a" : "#2563eb" }}>
-                      {location.state.cultureFit.score.toFixed(1)}%
+                      {Math.round(location.state.cultureFit.score)}%
                     </Typography>
                     <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>culture fit</Typography>
                   </Box>
@@ -2096,6 +2096,51 @@ export default function VideoPlayer() {
                   </Box>
                 )}
               </Box>
+              {location.state.cultureFit.candidateScores && (() => {
+                const LABELS = ['Teamwork', 'Customer', 'Integrity', 'Innovation', 'Excellence'];
+                const cs = location.state.cultureFit.candidateScores;
+                const ts = location.state.cultureFit.targets || [3,3,3,3,3];
+                const ratios = ts.map((t, i) => Math.min(cs[i], t) / t);
+                const shortfalls = ts.map((t, i) => Math.max(0, t - cs[i]));
+                const bestIdx = ratios.indexOf(Math.max(...ratios));
+                const worstIdx = shortfalls.indexOf(Math.max(...shortfalls));
+                const bestLabel = LABELS[bestIdx];
+                const worstLabel = LABELS[worstIdx];
+                const BEST_COMMENTS = {
+                  Teamwork: "Strong team fit — collaborative warmth and communication style align well with the role.",
+                  Customer: "Customer-ready — tone, clarity and engagement style match the customer-facing requirements.",
+                  Integrity: "High integrity signal — consistent delivery, authenticity and articulation are well-matched.",
+                  Innovation: "Innovation-ready — energy, vocal dynamism and adaptability align with the role profile.",
+                  Excellence: "Excellence match — articulation, tone and delivery precision closely match the standard.",
+                };
+                const GAP_COMMENTS = {
+                  Teamwork: "Teamwork gap — collaborative communication traits are below the role's expectations.",
+                  Customer: "Customer gap — communication clarity and engagement style needs development for this role.",
+                  Integrity: "Integrity gap — consistency and authentic expression are below what this role demands.",
+                  Innovation: "Innovation gap — energy levels and dynamic delivery are below the role's expectations.",
+                  Excellence: "Excellence gap — delivery quality and precision articulation need improvement for this role.",
+                };
+                return (
+                  <Box sx={{ px: 2.5, pb: 2.5, display: "flex", flexDirection: "column", gap: 1 }}>
+                    <Box sx={{ bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 2, px: 1.5, py: 1 }}>
+                      <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 700, display: "block", mb: 0.3 }}>
+                        Best fit · {bestLabel}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "#166534", lineHeight: 1.4 }}>
+                        {BEST_COMMENTS[bestLabel]}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: 2, px: 1.5, py: 1 }}>
+                      <Typography variant="caption" sx={{ color: "#b45309", fontWeight: 700, display: "block", mb: 0.3 }}>
+                        Needs work · {worstLabel}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "#92400e", lineHeight: 1.4 }}>
+                        {GAP_COMMENTS[worstLabel]}
+                      </Typography>
+                    </Box>
+                  </Box>
+                );
+              })()}
             </Box>
           )}
         </Box>

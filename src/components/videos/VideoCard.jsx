@@ -178,7 +178,7 @@ export default function VideoCard({ video, onClick, isSearchResult, cultureFitSc
           }}
         >
           {cultureFitScore !== null
-            ? `${Number(cultureFitScore).toFixed(1)}% fit`
+            ? `${Math.round(cultureFitScore)}% fit`
             : "N/A fit"}
         </Box>
       )}
