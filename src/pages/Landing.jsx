@@ -1,9 +1,10 @@
 import Hero from "../components/landing/Hero";
 import Video from "../components/landing/Video";
 import Features from "../components/landing/Features";
-import Carousel from "../components/landing/Carousel";
+import PlacementWall from "../components/landing/PlacementWall";
+import InstitutesRow from "../components/landing/InstitutesRow";
+import WorkshopsRow from "../components/landing/WorkshopsRow";
 import FAQ from "../components/landing/FAQ";
-import Testimonials from "../components/landing/Testimonials";
 import Footer from "../components/landing/Footer";
 import ContactSection from "../components/landing/ContactSection";
 
@@ -12,10 +13,11 @@ export default function Landing() {
     <>
       <Hero />
       <Features />
+      <PlacementWall />
+      <InstitutesRow />
+      <WorkshopsRow />
       <Video />
-      <Carousel />
       <FAQ />
-      <Testimonials />
       <ContactSection />
       <Footer />
     </>

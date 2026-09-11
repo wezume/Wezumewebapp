@@ -36,7 +36,7 @@ const sections = [
       },
       {
         heading: "AI-Driven Insights",
-        desc: "Evaluate candidates beyond skills using AI-enabled personality analysis.",
+        desc: "Evaluate candidates beyond skills using AI-enabled personality and culture-fit assessment.",
       },
     ],
   },

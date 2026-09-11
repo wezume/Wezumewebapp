@@ -74,11 +74,10 @@ const Hero = () => {
 
             {/* Subheading */}
             <p className="mt-6 text-lg sm:text-xl lg:text-2xl text-white/90 font-medium leading-relaxed">
-              The new-age interactive job search platform that
-              <br />
-              highlights your{" "}
-              <span className="text-white font-bold">skills</span> - not just
-              plain words.
+              Record a 1-min video resume, get{" "}
+              <span className="text-white font-bold">AI feedback</span>, and
+              get discovered by recruiters — who see AI-matched
+              culture-fit scores.
             </p>
 
             {/* CTA */}
