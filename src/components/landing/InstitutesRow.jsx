@@ -10,6 +10,8 @@ const colleges = [
   { name: "Jansons School of Business", logo: "jansons-school-of-business.png" },
   { name: "Saveetha Institute of Medical and Technical Sciences", logo: "saveetha-institute-of-medical-and-technical-sciences.png" },
   { name: "DBS Global University", logo: "dbs-global-university.png" },
+  { name: "Amrita Vishwa Vidyapeetham", logo: "amrita-vishwa-vidyapeetham.png" },
+  { name: "Asan Memorial College of Engineering & Technology", logo: "asan-memorial-college-of-engineering-and-technology.jpg" },
 ];
 // two identical, self-contained groups (logos + trailing counter tile) so
 // translateX(-50%) wraps seamlessly regardless of how wide the counter tile is
