@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import JobsPanel from "./JobsPanel";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -69,6 +70,7 @@ export default function Navbar() {
           <a href="#contact" className="hover:text-blue-200 transition-colors">
             Get a Mandate
           </a>
+          <JobsPanel />
           <a
             href="/login"
             className="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
@@ -77,8 +79,9 @@ export default function Navbar() {
           </a>
         </div>
 
-        {/* Mobile Login Button */}
-        <div className="md:hidden relative z-10">
+        {/* Mobile Jobs + Login Buttons */}
+        <div className="md:hidden relative z-10 flex items-center gap-2">
+          <JobsPanel />
           <a
             href="/login"
             className="bg-white text-blue-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-50 transition-colors text-sm"
