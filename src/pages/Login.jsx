@@ -333,6 +333,18 @@ export default function Login() {
             </Typography>
           </Box>
 
+          <Typography
+            sx={{
+              fontSize: { xs: "12px", sm: "12.5px", md: "13px" },
+              color: "text.secondary",
+              textAlign: "center",
+              mb: { xs: 1.5, sm: 1.8, md: 2 },
+              mt: { xs: -1, sm: -1.5, md: -1.5 },
+            }}
+          >
+            For Recruiters, Placement Cells & Investors — jobseekers, use the Wezume app.
+          </Typography>
+
           <Box
             component="form"
             onSubmit={handleLogin}

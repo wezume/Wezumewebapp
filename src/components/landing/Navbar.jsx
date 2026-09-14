@@ -75,7 +75,7 @@ export default function Navbar() {
             href="/login"
             className="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
           >
-            Login
+            Partner Login
           </a>
         </div>
 
@@ -86,7 +86,7 @@ export default function Navbar() {
             href="/login"
             className="bg-white text-blue-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-50 transition-colors text-sm"
           >
-            Login
+            Partner Login
           </a>
         </div>
       </nav>
