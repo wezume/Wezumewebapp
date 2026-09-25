@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import JobsPanel from "./JobsPanel";
+import InternshipBanner from "./InternshipBanner";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -18,12 +20,12 @@ export default function Navbar() {
   }, []);
 
   return (
-    <>
+    <div className="fixed top-0 left-0 w-full z-50">
       {/* Navbar */}
       <nav
-        className={`fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 md:px-12 py-6 transition-all duration-300 ${
-          scrolled 
-            ? "bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 shadow-lg" 
+        className={`flex justify-between items-center px-6 md:px-12 py-6 transition-all duration-300 ${
+          scrolled
+            ? "bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 shadow-lg"
             : "bg-transparent"
         }`}
       >
@@ -90,6 +92,10 @@ export default function Navbar() {
           </a>
         </div>
       </nav>
-    </>
+      <InternshipBanner
+        dismissed={bannerDismissed}
+        onDismiss={() => setBannerDismissed(true)}
+      />
+    </div>
   );
 }
