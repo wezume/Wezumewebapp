@@ -22,21 +22,21 @@ export default function InternshipBanner({ dismissed, onDismiss }) {
   return (
     <>
       {!dismissed && (
-        <div className="w-full h-9 md:h-10 bg-gradient-to-r from-amber-400 to-orange-400">
-          <div className="relative max-w-6xl mx-auto h-full px-10 flex items-center justify-center">
+        <div className="w-full flex justify-center py-2 md:py-2.5">
+          <div className="relative">
             <button
               type="button"
               onClick={() => setShowPopup(true)}
               aria-label="Apply for internship"
-              className="ib-blink font-extrabold text-blue-950 text-xs sm:text-sm md:text-base flex items-center gap-1.5 tracking-wide"
+              className="ib-blink bg-blue-600 text-white font-extrabold text-sm sm:text-base md:text-lg px-5 py-2.5 md:px-6 md:py-3 rounded-full shadow-lg tracking-wide hover:bg-blue-700 transition-colors"
             >
-              🎓 Apply for Internship
+              Apply for Internship
             </button>
             <button
               type="button"
               onClick={onDismiss}
               aria-label="Dismiss"
-              className="absolute right-2 md:right-4 w-6 h-6 rounded-full bg-blue-950/20 text-blue-950 text-xs flex items-center justify-center hover:bg-blue-950/30"
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-800 text-white text-[10px] leading-none flex items-center justify-center shadow hover:bg-gray-900"
             >
               ×
             </button>
@@ -71,8 +71,9 @@ export default function InternshipBanner({ dismissed, onDismiss }) {
 
       <style jsx>{`
         @keyframes ib-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.55; }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.65); }
+          70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
         }
         .ib-blink {
           animation: ib-pulse 1.3s ease-in-out infinite;
