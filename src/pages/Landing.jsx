@@ -7,10 +7,11 @@ import WorkshopsRow from "../components/landing/WorkshopsRow";
 import FAQ from "../components/landing/FAQ";
 import Footer from "../components/landing/Footer";
 import ContactSection from "../components/landing/ContactSection";
+import { AdminAuthProvider } from "../context/AdminAuthContext";
 
 export default function Landing() {
   return (
-    <>
+    <AdminAuthProvider>
       <Hero />
       <Features />
       <PlacementWall />
@@ -20,6 +21,6 @@ export default function Landing() {
       <FAQ />
       <ContactSection />
       <Footer />
-    </>
+    </AdminAuthProvider>
   );
 }

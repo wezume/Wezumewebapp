@@ -1,62 +1,22 @@
-import { useState } from "react";
-
-const ASSET_DIR = "/assets/homepage-trust-sections";
-
-const colleges = [
-  { name: "Krea University", logo: "krea-university.png" },
-  { name: "REVA University", logo: "reva-university.png" },
-  { name: "Madras Christian College", label: "MCC Boyd", logo: "madras-christian-college.png", wide: true },
-  { name: "M.O.P Vaishnav College for Women", label: "MOP Vaishnav", logo: "m-o-p-vaishnav-college-for-women.png", wide: true },
-  { name: "Jansons School of Business", logo: "jansons-school-of-business.png" },
-  { name: "Saveetha Institute of Medical and Technical Sciences", logo: "saveetha-institute-of-medical-and-technical-sciences.png" },
-  { name: "DBS Global University", logo: "dbs-global-university.png" },
-  { name: "Amrita Vishwa Vidyapeetham", logo: "amrita-vishwa-vidyapeetham.png" },
-  { name: "Asan Memorial College of Engineering & Technology", logo: "asan-memorial-college-of-engineering-and-technology.jpg" },
-];
-// two identical, self-contained groups (logos + trailing counter tile) so
-// translateX(-50%) wraps seamlessly regardless of how wide the counter tile is
-const collegeGroups = [colleges, colleges];
-
-const companies = [
-  { name: "Wipro", logo: "wipro.png" },
-  { name: "Larsen & Toubro", logo: "larsen-and-toubro.png" },
-  { name: "L&T-SuFin", logo: "l-and-t-sufin.svg" },
-  { name: "SurveySparrow", logo: "surveysparrow.png" },
-  { name: "MUFG", logo: "mufg.png" },
-  { name: "Itus Capital", logo: "itus-capital.png" },
-  { name: "Mesa School of Business", logo: "mesa-school-of-business.png" },
-  { name: "Infosys", logo: "infosys.png" },
-  { name: "TCS", logo: "tata-consultancy-services.png" },
-  { name: "HCLTech", logo: "hcltech.png" },
-  { name: "Deloitte", logo: "deloitte.png" },
-  { name: "Accenture", logo: "accenture.png" },
-  { name: "Cognizant", logo: "cognizant.png" },
-  { name: "Amazon", logo: "amazon.png" },
-  { name: "Goldman Sachs", logo: "goldman-sachs.png" },
-  { name: "HDFC Bank", logo: "hdfc-bank.png" },
-  { name: "ICICI Bank", logo: "icici-bank.png" },
-];
-const companyGroups = [companies, companies];
-
-const stats = [
-  { value: "50+", label: "partner institutes" },
-  { value: "8+", label: "cities" },
-  { value: "10K+", label: "students trained" },
-  { value: "250+", label: "networked companies" },
-];
+import { useEffect, useState } from "react";
+import { Lock, Trash2 } from "lucide-react";
+import { trustApi, useAdminAuth } from "../../context/AdminAuthContext";
+import ImageUploadField from "./ImageUploadField";
 
 const BAND = {
   college: "border-t-emerald-400",
   company: "border-t-blue-400",
 };
 
-function LogoTile({ name, label, logo, wide, decorative, kind }) {
+const EMPTY_FORM = { name: "", label: "", logoUrl: "", wide: false };
+
+function LogoTile({ name, label, logoUrl, wide, decorative, kind }) {
   return (
     <div
       className={`flex-none ${wide ? "w-64" : "w-48"} h-24 bg-white border border-gray-200 border-t-4 ${BAND[kind]} rounded-xl flex items-center justify-center gap-3 px-4`}
     >
       <img
-        src={`${ASSET_DIR}/${logo}`}
+        src={logoUrl}
         alt={decorative ? "" : name}
         loading="lazy"
         decoding="async"
@@ -88,12 +48,149 @@ function RowLabel({ dot, children }) {
   );
 }
 
+function EditGrid({ items, kind, onFieldChange, onRemove, newItem, setNewItem, onAdd, showLabelField }) {
+  return (
+    <div className="flex flex-wrap gap-3 justify-center mb-6">
+      {items.map((item) => (
+        <div key={item.id} className="w-48 bg-white border border-gray-200 rounded-xl p-2.5 flex flex-col gap-1.5">
+          <ImageUploadField
+            value={item.logoUrl}
+            onUploaded={(url) => onFieldChange(item.id, "logoUrl", url)}
+            label="logo"
+          />
+          <input
+            className="border border-gray-200 rounded-md px-2 py-1 text-xs bg-gray-50"
+            value={item.name}
+            placeholder="Name"
+            onChange={(e) => onFieldChange(item.id, "name", e.target.value)}
+          />
+          {showLabelField && (
+            <input
+              className="border border-gray-200 rounded-md px-2 py-1 text-xs bg-gray-50"
+              value={item.label || ""}
+              placeholder="Label (optional)"
+              onChange={(e) => onFieldChange(item.id, "label", e.target.value)}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => onRemove(item.id)}
+            className="self-end w-6 h-6 rounded-md border border-gray-200 bg-gray-50 text-red-500 flex items-center justify-center"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ))}
+
+      <form onSubmit={onAdd} className="w-48 border-2 border-dashed border-gray-300 rounded-xl p-2.5 flex flex-col gap-1.5">
+        <ImageUploadField
+          value={newItem.logoUrl}
+          onUploaded={(url) => setNewItem((f) => ({ ...f, logoUrl: url }))}
+          label="logo"
+        />
+        <input
+          className="border border-dashed border-gray-300 rounded-md px-2 py-1 text-xs"
+          value={newItem.name}
+          placeholder="Name"
+          onChange={(e) => setNewItem((f) => ({ ...f, name: e.target.value }))}
+        />
+        {showLabelField && (
+          <input
+            className="border border-dashed border-gray-300 rounded-md px-2 py-1 text-xs"
+            value={newItem.label}
+            placeholder="Label (optional)"
+            onChange={(e) => setNewItem((f) => ({ ...f, label: e.target.value }))}
+          />
+        )}
+        <button
+          type="submit"
+          className="border-2 border-dashed border-gray-300 text-gray-500 text-xs font-semibold rounded-lg py-1.5 hover:border-blue-400 hover:text-blue-600 transition-colors"
+        >
+          + Add {kind}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function InstitutesRow() {
+  const { isUnlocked, requestUnlock, lock, authHeaders } = useAdminAuth();
+
+  const [colleges, setColleges] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [collegesPaused, setCollegesPaused] = useState(false);
   const [companiesPaused, setCompaniesPaused] = useState(false);
+  const [newCollege, setNewCollege] = useState(EMPTY_FORM);
+  const [newCompany, setNewCompany] = useState(EMPTY_FORM);
+
+  useEffect(() => {
+    refreshColleges();
+    refreshCompanies();
+  }, []);
+
+  function refreshColleges() {
+    return trustApi
+      .get("/partners?type=COLLEGE")
+      .then((res) => setColleges(res.data))
+      .catch(() => {});
+  }
+
+  function refreshCompanies() {
+    return trustApi
+      .get("/partners?type=COMPANY")
+      .then((res) => setCompanies(res.data))
+      .catch(() => {});
+  }
+
+  function updateField(setList, id, field, value) {
+    setList((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
+    trustApi.put(`/partners/edit/${id}`, { field, value }, authHeaders()).catch(() => {
+      refreshColleges();
+      refreshCompanies();
+    });
+  }
+
+  function removeItem(id, refresh) {
+    trustApi.delete(`/partners/delete/${id}`, authHeaders()).then(refresh).catch(refresh);
+  }
+
+  function addItem(type, newItem, setNewItem, refresh) {
+    return (e) => {
+      e.preventDefault();
+      if (!newItem.name.trim() || !newItem.logoUrl) return;
+      trustApi
+        .post("/partners/add", { type, ...newItem }, authHeaders())
+        .then(() => {
+          setNewItem(EMPTY_FORM);
+          refresh();
+        })
+        .catch(refresh);
+    };
+  }
+
+  const collegeGroups = [colleges, colleges];
+  const companyGroups = [companies, companies];
+
+  const stats = [
+    { value: "50+", label: "partner institutes" },
+    { value: "8+", label: "cities" },
+    { value: "10K+", label: "students trained" },
+    { value: "250+", label: "networked companies" },
+  ];
 
   return (
-    <section className="py-10 bg-white">
+    <section className="py-10 bg-white relative">
+      <button
+        type="button"
+        onClick={() => (isUnlocked ? lock() : requestUnlock())}
+        aria-label="Edit list"
+        className={`absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+          isUnlocked ? "text-blue-600 bg-blue-50" : "text-gray-300 hover:text-gray-400"
+        }`}
+      >
+        <Lock size={13} />
+      </button>
+
       <div className="max-w-2xl mx-auto text-center px-4 sm:px-6 mb-6">
         <span className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 text-sm font-semibold px-4 py-1.5 rounded-full mb-3">
           Our Network
@@ -104,53 +201,82 @@ export default function InstitutesRow() {
         <p className="text-gray-500">Colleges training talent, Companies hiring it.</p>
       </div>
 
-      {/* Colleges row: right -> left */}
-      <RowLabel dot="bg-emerald-400">Colleges</RowLabel>
-      <div
-        className="ir-mask overflow-hidden mb-4"
-        onMouseEnter={() => setCollegesPaused(true)}
-        onMouseLeave={() => setCollegesPaused(false)}
-        onTouchStart={() => setCollegesPaused(true)}
-        onTouchEnd={() => setCollegesPaused(false)}
-      >
-        <div
-          className="flex gap-4 w-max ir-track-colleges"
-          style={{ animationPlayState: collegesPaused ? "paused" : "running" }}
-        >
-          {collegeGroups.map((group, g) => (
-            <div key={g} aria-hidden={g > 0 ? "true" : undefined} className="flex gap-4 flex-none">
-              {group.map((c, i) => (
-                <LogoTile key={i} {...c} kind="college" decorative={g > 0} />
-              ))}
-              <CounterTile label="+42 more colleges" />
-            </div>
-          ))}
-        </div>
-      </div>
+      {isUnlocked ? (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <RowLabel dot="bg-emerald-400">Colleges</RowLabel>
+          <EditGrid
+            items={colleges}
+            kind="college"
+            onFieldChange={(id, field, value) => updateField(setColleges, id, field, value)}
+            onRemove={(id) => removeItem(id, refreshColleges)}
+            newItem={newCollege}
+            setNewItem={setNewCollege}
+            onAdd={addItem("COLLEGE", newCollege, setNewCollege, refreshColleges)}
+            showLabelField
+          />
 
-      {/* Companies row: left -> right */}
-      <RowLabel dot="bg-blue-400">Companies</RowLabel>
-      <div
-        className="ir-mask overflow-hidden"
-        onMouseEnter={() => setCompaniesPaused(true)}
-        onMouseLeave={() => setCompaniesPaused(false)}
-        onTouchStart={() => setCompaniesPaused(true)}
-        onTouchEnd={() => setCompaniesPaused(false)}
-      >
-        <div
-          className="flex gap-4 w-max ir-track-companies"
-          style={{ animationPlayState: companiesPaused ? "paused" : "running" }}
-        >
-          {companyGroups.map((group, g) => (
-            <div key={g} aria-hidden={g > 0 ? "true" : undefined} className="flex gap-4 flex-none">
-              {group.map((c, i) => (
-                <LogoTile key={i} {...c} kind="company" decorative={g > 0} />
-              ))}
-              <CounterTile label="+233 more companies" />
-            </div>
-          ))}
+          <RowLabel dot="bg-blue-400">Companies</RowLabel>
+          <EditGrid
+            items={companies}
+            kind="company"
+            onFieldChange={(id, field, value) => updateField(setCompanies, id, field, value)}
+            onRemove={(id) => removeItem(id, refreshCompanies)}
+            newItem={newCompany}
+            setNewItem={setNewCompany}
+            onAdd={addItem("COMPANY", newCompany, setNewCompany, refreshCompanies)}
+          />
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Colleges row: right -> left */}
+          <RowLabel dot="bg-emerald-400">Colleges</RowLabel>
+          <div
+            className="ir-mask overflow-hidden mb-4"
+            onMouseEnter={() => setCollegesPaused(true)}
+            onMouseLeave={() => setCollegesPaused(false)}
+            onTouchStart={() => setCollegesPaused(true)}
+            onTouchEnd={() => setCollegesPaused(false)}
+          >
+            <div
+              className="flex gap-4 w-max ir-track-colleges"
+              style={{ animationPlayState: collegesPaused ? "paused" : "running" }}
+            >
+              {collegeGroups.map((group, g) => (
+                <div key={g} aria-hidden={g > 0 ? "true" : undefined} className="flex gap-4 flex-none">
+                  {group.map((c, i) => (
+                    <LogoTile key={i} {...c} kind="college" decorative={g > 0} />
+                  ))}
+                  <CounterTile label="+42 more colleges" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Companies row: left -> right */}
+          <RowLabel dot="bg-blue-400">Companies</RowLabel>
+          <div
+            className="ir-mask overflow-hidden"
+            onMouseEnter={() => setCompaniesPaused(true)}
+            onMouseLeave={() => setCompaniesPaused(false)}
+            onTouchStart={() => setCompaniesPaused(true)}
+            onTouchEnd={() => setCompaniesPaused(false)}
+          >
+            <div
+              className="flex gap-4 w-max ir-track-companies"
+              style={{ animationPlayState: companiesPaused ? "paused" : "running" }}
+            >
+              {companyGroups.map((group, g) => (
+                <div key={g} aria-hidden={g > 0 ? "true" : undefined} className="flex gap-4 flex-none">
+                  {group.map((c, i) => (
+                    <LogoTile key={i} {...c} kind="company" decorative={g > 0} />
+                  ))}
+                  <CounterTile label="+233 more companies" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Stats */}
       <div className="flex flex-wrap justify-center gap-6 sm:gap-8 max-w-3xl mx-auto mt-6 pt-5 border-t border-gray-200 px-4 sm:px-6">

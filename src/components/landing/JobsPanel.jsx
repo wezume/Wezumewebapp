@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { X, Lock, Trash2 } from "lucide-react";
-
-const ADMIN_EMAIL = "pitch@wezume.com";
-const API_URL = import.meta.env.VITE_API_URL;
-
-// Deliberately NOT the shared axiosInstance: that instance reads the
-// visitor's own login cookie and redirects the whole page to /login on a
-// 401. This widget's admin session is separate from the site's normal
-// login and must never touch that cookie or trigger that redirect.
-const jobsApi = axios.create({ baseURL: API_URL });
+import { trustApi, useAdminAuth } from "../../context/AdminAuthContext";
 
 function initials(str) {
   return String(str)
@@ -23,16 +14,11 @@ function initials(str) {
 const EMPTY_FORM = { name: "", company: "", exp: "", ctc: "", jobId: "" };
 
 export default function JobsPanel() {
+  const { isUnlocked, requestUnlock, lock, authHeaders } = useAdminAuth();
+
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [hasFetched, setHasFetched] = useState(false);
-
-  const [editUnlocked, setEditUnlocked] = useState(false);
-  const [adminToken, setAdminToken] = useState(null);
-  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   const [newJob, setNewJob] = useState(EMPTY_FORM);
   const [applyRole, setApplyRole] = useState(null);
@@ -41,7 +27,7 @@ export default function JobsPanel() {
 
   useEffect(() => {
     if (open && !hasFetched) {
-      jobsApi
+      trustApi
         .get("/jobs")
         .then((res) => setJobs(res.data))
         .catch(() => setJobs([]))
@@ -54,52 +40,31 @@ export default function JobsPanel() {
       if (e.key !== "Escape") return;
       setOpen(false);
       setApplyRole(null);
-      setShowPasswordPrompt(false);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   function refreshJobs() {
-    return jobsApi
+    return trustApi
       .get("/jobs")
       .then((res) => setJobs(res.data))
       .catch(() => {});
   }
 
-  function submitPassword(e) {
-    e.preventDefault();
-    setPasswordSubmitting(true);
-    setPasswordError("");
-    jobsApi
-      .post("/login", { email: ADMIN_EMAIL, password: passwordInput })
-      .then((res) => {
-        setAdminToken(res.data.token);
-        setEditUnlocked(true);
-        setShowPasswordPrompt(false);
-        setPasswordInput("");
-      })
-      .catch(() => setPasswordError("Incorrect password."))
-      .finally(() => setPasswordSubmitting(false));
-  }
-
-  function authHeaders() {
-    return { headers: { Authorization: `Bearer ${adminToken}` } };
-  }
-
   function updateField(id, field, value) {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, [field]: value } : j)));
-    jobsApi.put(`/jobs/edit/${id}`, { field, value }, authHeaders()).catch(refreshJobs);
+    trustApi.put(`/jobs/edit/${id}`, { field, value }, authHeaders()).catch(refreshJobs);
   }
 
   function removeJob(id) {
-    jobsApi.delete(`/jobs/delete/${id}`, authHeaders()).then(refreshJobs).catch(refreshJobs);
+    trustApi.delete(`/jobs/delete/${id}`, authHeaders()).then(refreshJobs).catch(refreshJobs);
   }
 
   function addJob(e) {
     e.preventDefault();
     if (!newJob.name.trim()) return;
-    jobsApi
+    trustApi
       .post("/jobs/add", newJob, authHeaders())
       .then(() => {
         setNewJob(EMPTY_FORM);
@@ -127,8 +92,8 @@ export default function JobsPanel() {
         <div className="hidden md:block absolute top-full right-0 mt-3 w-[420px] max-w-[calc(100vw-48px)] bg-white text-gray-900 rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50">
           <PanelBody
             jobs={jobs}
-            editUnlocked={editUnlocked}
-            onEditToggle={() => (editUnlocked ? setEditUnlocked(false) : setShowPasswordPrompt(true))}
+            editUnlocked={isUnlocked}
+            onEditToggle={() => (isUnlocked ? lock() : requestUnlock())}
             onClose={() => setOpen(false)}
             onApply={setApplyRole}
             onFieldChange={updateField}
@@ -148,8 +113,8 @@ export default function JobsPanel() {
             <div className="w-9 h-1 rounded-full bg-gray-300 mx-auto mt-2.5 mb-1 flex-none" />
             <PanelBody
               jobs={jobs}
-              editUnlocked={editUnlocked}
-              onEditToggle={() => (editUnlocked ? setEditUnlocked(false) : setShowPasswordPrompt(true))}
+              editUnlocked={isUnlocked}
+              onEditToggle={() => (isUnlocked ? lock() : requestUnlock())}
               onClose={() => setOpen(false)}
               onApply={setApplyRole}
               onFieldChange={updateField}
@@ -160,47 +125,6 @@ export default function JobsPanel() {
               scrollable
             />
           </div>
-        </div>
-      )}
-
-      {showPasswordPrompt && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-5">
-          <form
-            onSubmit={submitPassword}
-            className="bg-white rounded-2xl shadow-2xl p-5 w-full max-w-[280px] text-center"
-          >
-            <div className="w-11 h-11 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center text-white">
-              <Lock size={18} />
-            </div>
-            <h4 className="font-semibold text-sm mb-3 text-gray-900">Admin password</h4>
-            <input
-              type="password"
-              autoFocus
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Password"
-            />
-            {passwordError && <div className="text-xs text-red-600 mb-2">{passwordError}</div>}
-            <button
-              type="submit"
-              disabled={passwordSubmitting}
-              className="w-full bg-blue-600 text-white font-semibold text-sm rounded-lg py-2 hover:bg-blue-700 transition-colors disabled:opacity-60"
-            >
-              {passwordSubmitting ? "Checking…" : "Unlock"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowPasswordPrompt(false);
-                setPasswordError("");
-                setPasswordInput("");
-              }}
-              className="mt-2 text-xs text-gray-400 underline"
-            >
-              Cancel
-            </button>
-          </form>
         </div>
       )}
 
