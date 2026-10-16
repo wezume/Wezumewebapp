@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import JobsPanel from "./JobsPanel";
-import InternshipBanner from "./InternshipBanner";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -92,10 +90,6 @@ export default function Navbar() {
           </a>
         </div>
       </nav>
-      <InternshipBanner
-        dismissed={bannerDismissed}
-        onDismiss={() => setBannerDismissed(true)}
-      />
     </div>
   );
 }

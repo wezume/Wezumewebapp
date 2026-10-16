@@ -114,7 +114,7 @@ export default function JobsPanel() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="relative border border-white text-white px-3 py-1.5 text-sm md:px-4 md:py-2 md:text-base rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors"
+        className="jp-blink relative bg-blue-600 text-white px-3 py-1.5 text-sm md:px-4 md:py-2 md:text-base rounded-lg font-semibold hover:bg-blue-700 transition-colors"
       >
         Jobs
         <span className="absolute -top-2 -right-2 bg-emerald-500 text-white text-[7px] md:text-[8px] font-extrabold tracking-wide px-1 py-0.5 md:px-1.5 rounded-full leading-none shadow">
@@ -237,6 +237,22 @@ export default function JobsPanel() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes jp-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.65); }
+          70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+        .jp-blink {
+          animation: jp-pulse 1.3s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .jp-blink {
+            animation: none;
+          }
+        }
+      `}</style>
     </div>
   );
 }
