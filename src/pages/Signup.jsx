@@ -622,10 +622,13 @@ export default function Signup() {
                         autoplay 
                         style={{ width: 300, height: 300 }} 
                     />
-                    <Typography variant="h4" sx={{ mt: 2, mb: 3, color: "#1976d2" }}>
+                    <Typography variant="h4" sx={{ mt: 2, mb: 1.5, color: "#1976d2" }}>
                         {alert.message}
                     </Typography>
-                    <Button 
+                    <Typography variant="body1" sx={{ mb: 3, color: "text.secondary", maxWidth: 480 }}>
+                        We sent a verification link to {formData.email}. Click it (check your spam folder too), then log in. The link is valid for 24 hours.
+                    </Typography>
+                    <Button
                         variant="contained" 
                         size="large" 
                         onClick={() => navigate('/login')}

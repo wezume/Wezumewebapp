@@ -115,7 +115,10 @@ export const useAppStore = create(
             isLoading: false, 
             error: errorMessage 
           })
-          throw new Error(errorMessage)
+          const loginError = new Error(errorMessage)
+          loginError.code = error.response?.data?.code
+          loginError.email = error.response?.data?.email
+          throw loginError
         }
       },
       

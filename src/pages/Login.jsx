@@ -11,7 +11,8 @@ import {
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { keyframes } from "@mui/system";
-import { Link, useNavigate } from "react-router"; 
+import { Link, useNavigate, useSearchParams } from "react-router"; 
+import axiosInstance from "../axios/axios";
 import { useAppStore } from "../store/appStore";
 import personPeeking from "../assets/images/person-peeking.png";
 
@@ -49,12 +50,36 @@ export default function Login() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [hasEmailBeenFocused, setHasEmailBeenFocused] = useState(false);
 
+  const [searchParams] = useSearchParams();
+  const [verifyPanel, setVerifyPanel] = useState({ show: false, email: "", sent: false, sending: false });
+
   const { login, isLoading, clearError, isAuthenticated, getUserDetails } = useAppStore();
   const navigate = useNavigate();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Landing from the email verification link (?verified=1 / ?verify_error=...)
+  useEffect(() => {
+    if (searchParams.get("verified") === "1") {
+      setAlert({
+        show: true,
+        message: "Your email has been verified. Please log in to continue.",
+        severity: "success"
+      });
+    } else if (searchParams.get("verify_error")) {
+      const expired = searchParams.get("verify_error") === "expired";
+      setAlert({
+        show: true,
+        message: expired
+          ? "This verification link has expired. Enter your email below and request a new one."
+          : "This verification link is invalid. Enter your email below and request a new one.",
+        severity: "error"
+      });
+      setVerifyPanel({ show: true, email: "", sent: false, sending: false });
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -101,6 +126,34 @@ export default function Login() {
     setShowPassword(!showPassword);
   };
 
+  const handleResendVerification = async () => {
+    const email = (verifyPanel.email || formData.email || "").trim();
+    if (!email) {
+      setAlert({ show: true, message: "Please enter your email address first.", severity: "error" });
+      return;
+    }
+    setVerifyPanel((prev) => ({ ...prev, sending: true }));
+    try {
+      await axiosInstance.post("/verify/send", { email });
+      setVerifyPanel((prev) => ({ ...prev, email, sent: true, sending: false }));
+      setAlert({
+        show: true,
+        message: "Verification email sent. Please check your inbox (and spam folder).",
+        severity: "success"
+      });
+    } catch (err) {
+      setVerifyPanel((prev) => ({ ...prev, sending: false }));
+      const status = err.response?.status;
+      setAlert({
+        show: true,
+        message: status === 409
+          ? "This email is already verified. Please log in."
+          : err.response?.data?.message || "Could not send the verification email. Please try again.",
+        severity: status === 409 ? "success" : "error"
+      });
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsNavigating(true);
@@ -118,6 +171,15 @@ export default function Login() {
       }, 1500);
     } catch (error) {
       setIsNavigating(false);
+      if (error.code === "EMAIL_NOT_VERIFIED") {
+        setVerifyPanel({ show: true, email: error.email || formData.email, sent: false, sending: false });
+        setAlert({
+          show: true,
+          message: "Please verify your email before logging in. Check your inbox for the verification link.",
+          severity: "error"
+        });
+        return;
+      }
       setAlert({
         show: true,
         message: error.message || "Login failed. Please check your credentials and try again.",
@@ -270,6 +332,19 @@ export default function Login() {
             >
               {alert.message}
             </Alert>
+          )}
+
+          {verifyPanel.show && (
+            <Box sx={{ width: "100%", maxWidth: { xs: "90%", sm: "400px", md: "450px", lg: "380px" }, mb: 2, textAlign: "center" }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleResendVerification}
+                disabled={verifyPanel.sending}
+              >
+                {verifyPanel.sending ? "Sending..." : verifyPanel.sent ? "Resend verification email again" : "Resend verification email"}
+              </Button>
+            </Box>
           )}
 
           <Box
