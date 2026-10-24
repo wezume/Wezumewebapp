@@ -31,6 +31,9 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import PeopleIcon from '@mui/icons-material/People';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import SchoolIcon from '@mui/icons-material/School';
+import CohortCodesDialog from '../components/dashboard/CohortCodesDialog';
+import axiosInstance from '../axios/axios';
 import { Refresh } from "@mui/icons-material";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppStore } from "../store/appStore";
@@ -187,6 +190,8 @@ export default function Dashboard() {
     getJobVideosCounts,
     refreshLikedVideos,
     refreshCommentedVideos,
+    selectedCohortCode,
+    setSelectedCohortCode,
   } = useAppStore();
 
   const [displayVideos, setDisplayVideos] = useState([]);
@@ -224,6 +229,33 @@ export default function Dashboard() {
   const jdInputRef = useRef(null);
 
   const isPlacementOrAcademy = userDetails?.jobOption === "placementDrive" || userDetails?.jobOption === "Academy";
+
+  // Placement class codes (college code - specialisation - batch)
+  const [cohortInfo, setCohortInfo] = useState({ collegeCode: "", collegeName: "", codes: [] });
+  const [codesDialogOpen, setCodesDialogOpen] = useState(false);
+
+  const loadCohortCodes = async () => {
+    try {
+      const res = await axiosInstance.get("/cohort/codes");
+      setCohortInfo({
+        collegeCode: res.data.collegeCode || "",
+        collegeName: res.data.collegeName || "",
+        codes: res.data.codes || [],
+      });
+    } catch (err) {
+      console.error("Error loading class codes:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isPlacementOrAcademy) loadCohortCodes();
+  }, [isPlacementOrAcademy]);
+
+  const handleCohortSelect = async (event) => {
+    setSelectedCohortCode(event.target.value);
+    await getVideos(true);
+    await getJobVideosCounts();
+  };
 
   const getActiveTabFromURL = () => {
     const urlTab = searchParams.get('tab');
@@ -824,18 +856,11 @@ export default function Dashboard() {
         <Grid container spacing={2}>
           <Grid size={{ xs: 6, md: 3 }}>
             <Card
-              onClick={() => navigate("/app/culture")}
               sx={{
                 borderRadius: "12px",
-                background: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
-                boxShadow: "0 4px 12px rgba(22, 163, 74, 0.3)",
-                transition: "all 0.3s ease",
-                cursor: "pointer",
+                background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                boxShadow: "0 4px 12px rgba(37, 99, 235, 0.3)",
                 height: { xs: 100, sm: 120, md: 140 },
-                "&:hover": {
-                  boxShadow: "0 6px 16px rgba(22, 163, 74, 0.4)",
-                  transform: { xs: "none", md: "translateY(-2px)" },
-                },
               }}
             >
               <Box
@@ -846,37 +871,54 @@ export default function Dashboard() {
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  p: { xs: 1.5, sm: 2, md: 2.5 },
-                  gap: { xs: 1, sm: 1.5, md: 2 },
+                  p: { xs: 1, sm: 1.5, md: 2 },
+                  gap: { xs: 0.5, sm: 1, md: 1.25 },
                 }}
               >
                 <Box
                   sx={{
-                    width: { xs: 48, sm: 56, md: 64 },
-                    height: { xs: 48, sm: 56, md: 64 },
+                    width: { xs: 36, sm: 44, md: 52 },
+                    height: { xs: 36, sm: 44, md: 52 },
                     borderRadius: "12px",
-                    background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                    background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    boxShadow: "0 4px 12px rgba(34, 197, 94, 0.3)",
+                    boxShadow: "0 4px 12px rgba(37, 99, 235, 0.3)",
                   }}
                 >
-                  <HubIcon sx={{ color: "white", fontSize: { xs: "1.5rem", sm: "1.75rem", md: "2rem" } }} />
+                  <SchoolIcon sx={{ color: "white", fontSize: { xs: "1.25rem", sm: "1.5rem", md: "1.75rem" } }} />
                 </Box>
-                <Box>
-                  <Typography
-                    variant="h6"
+                <FormControl size="small" sx={{ minWidth: 130 }}>
+                  <Select
+                    value={selectedCohortCode || ""}
+                    onChange={handleCohortSelect}
+                    displayEmpty
+                    size="small"
+                    IconComponent={KeyboardArrowDownIcon}
                     sx={{
-                      fontWeight: "600",
-                      fontSize: { xs: "0.75rem", sm: "0.875rem", md: "1rem" },
-                      color: "#1e293b",
-                      lineHeight: 1.2,
+                      backgroundColor: "white",
+                      borderRadius: "10px",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      "& .MuiSelect-select": { padding: "6px 12px", color: "#1d4ed8" },
                     }}
                   >
-                    Culture Fit
-                  </Typography>
-                </Box>
+                    <MenuItem value="">All my codes</MenuItem>
+                    {cohortInfo.codes.map((c) => (
+                      <MenuItem key={c.id} value={c.code}>
+                        {c.code} ({c.students})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button
+                  size="small"
+                  onClick={() => setCodesDialogOpen(true)}
+                  sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.75rem", py: 0, minHeight: 0 }}
+                >
+                  Manage codes
+                </Button>
               </Box>
             </Card>
           </Grid>
@@ -1561,6 +1603,14 @@ export default function Dashboard() {
 
       <Box sx={{ width: "100%", maxWidth: 1200, mb: 3, px: 2 }}>
         {renderTabCards()}
+        {isPlacementOrAcademy && (
+          <CohortCodesDialog
+            open={codesDialogOpen}
+            onClose={() => setCodesDialogOpen(false)}
+            info={cohortInfo}
+            onChanged={loadCohortCodes}
+          />
+        )}
       </Box>
 
       <Paper sx={{ width: "100%", maxWidth: 1200, p: 3, mb: 3, borderRadius: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>

@@ -18,6 +18,8 @@ export const useAppStore = create(
       isLoadingVideos: false,
       videoError: null,
       lastVideoEndpoint: null,
+      selectedCohortCode: '',
+      setSelectedCohortCode: (code) => set({ selectedCohortCode: code || '' }),
       currentPage: 0,
       hasMoreVideos: true,
       isLoadingMoreVideos: false,
@@ -131,6 +133,7 @@ export const useAppStore = create(
           videos: [], 
           videoError: null,
           lastVideoEndpoint: null,
+          selectedCohortCode: '',
           currentPage: 0,
           hasMoreVideos: true,
           isLoadingMoreVideos: false,
@@ -376,15 +379,19 @@ export const useAppStore = create(
           return []
         }
 
-        const currentEndpoint = userDetails.jobOption === 'placementDrive' || userDetails.jobOption === 'Academy' 
+        const isPlacement = userDetails.jobOption === 'placementDrive' || userDetails.jobOption === 'Academy'
+        const cohortCode = isPlacement ? get().selectedCohortCode : ''
+        const currentEndpoint = isPlacement
           ? `/videos/job/${userDetails.jobid}`
           : '/videos/videos'
+        // cache key also changes with the selected class code
+        const endpointKey = cohortCode ? `${currentEndpoint}#${cohortCode}` : currentEndpoint
         
         if (loadMore && (!hasMoreVideos || isLoadingMoreVideos)) {
           return videos
         }
         
-        if (!loadMore && !forceRefresh && videos.length > 0 && lastVideoEndpoint === currentEndpoint) {
+        if (!loadMore && !forceRefresh && videos.length > 0 && lastVideoEndpoint === endpointKey) {
           return videos
         }
         
@@ -402,7 +409,7 @@ export const useAppStore = create(
         
         try {
           const response = await axiosInstance.get(currentEndpoint, {
-            params: { page, size }
+            params: cohortCode ? { page, size, cohortCode } : { page, size }
           })
           
           const responseData = response.data || {}
@@ -419,7 +426,7 @@ export const useAppStore = create(
           set({ 
             videos: finalVideos,
             [loadMore ? 'isLoadingMoreVideos' : 'isLoadingVideos']: false,
-            lastVideoEndpoint: currentEndpoint,
+            lastVideoEndpoint: endpointKey,
             currentPage: page,
             hasMoreVideos: hasMore,
             videoError: null
@@ -546,7 +553,10 @@ export const useAppStore = create(
         set({ isLoadingJobVideosCounts: true })
         
         try {
-          const response = await axiosInstance.get(`/videos/counts/${userDetails.jobid}`)
+          const cohortCode = get().selectedCohortCode
+          const response = await axiosInstance.get(`/videos/counts/${userDetails.jobid}`, {
+            params: cohortCode ? { cohortCode } : {}
+          })
           const counts = {
             totalUsers: response.data.totalUsers || 0,
             totalVideos: response.data.totalVideos || 0
@@ -584,6 +594,7 @@ export const useAppStore = create(
         videos: [], 
         videoError: null, 
         lastVideoEndpoint: null,
+          selectedCohortCode: '',
         currentPage: 0,
         hasMoreVideos: true,
         isLoadingMoreVideos: false
